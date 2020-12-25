@@ -1,0 +1,5 @@
+[Public]
+Object=(Name=InstaGibPlus5E.UTPure,Class=Class,MetaClass=Engine.Mutator,Description="IG+5E UTPure,InstaGibPlus5E UTPure")
+Object=(Name=InstaGibPlus5E.ST_Mutator,Class=Class,MetaClass=Engine.Mutator,Description="IG+5E ST_Mutator,InstaGibPlus5E ST_Mutator")
+Object=(Name=InstaGibPlus5E.NewNetIG,Class=Class,MetaClass=Engine.Mutator,Description="IG+5E NewNetIG,InstaGibPlus5E NewNetIG")
+Object=(Name=InstaGibPlus5E.NewNetSA,Class=Class,MetaClass=Engine.Mutator,Description="IG+5E NewNetSA,InstaGibPlus5E NewNetSA")
