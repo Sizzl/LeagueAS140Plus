@@ -16,7 +16,6 @@ var Sound playedHitSound;
 var(Sounds) Sound cHitSound[16];
 
 // Replicated settings Client -> Server
-//	var bool	zzbConsoleInvalid;	// Should always be false on server.
 var bool	zzbStoppingTraceBot;	// True while stopping Trace Bot
 var int		zzNetspeed;		// The netspeed this client is using
 var bool	zzbForcedTick;		// True on server if Tick was forced (Called more than once)
@@ -125,23 +124,6 @@ var float LastRealCAPTime;
 var vector oldClientLoc;
 var decoration carriedFlag;
 
-
-struct MoveInfo {
-	var float Delta;
-	var bool bRun;
-	var bool bDuck;
-	var bool bPressedJump;
-	var EDodgeDir DodgeMove;
-	var vector Acceleration;
-	var rotator DeltaRot;
-};
-
-struct BetterVector {
-	var int X;
-	var int Y;
-	var int Z;
-};
-
 // HUD stuff
 var Mutator	zzHudMutes[50];		// Accepted Hud Mutators
 var Mutator	zzWaitMutes[50];	// Hud Mutes waiting to be accepted
@@ -158,15 +140,9 @@ var float	zzLogoStart;		// Start of logo display
 var int		zzSMCnt;		// ServerMove Count
 var bool	bMenuFixed;		// Fixed Menu item
 var float	zzCVTO;			// CenterView Time out.
-//var bool	zzbCanCSL;		// Console sets this to true if they are allowed to CSL
 
 // Consoles & Canvas
-//var Console	zzOldConsole;
-//var PureSuperDuperUberConsole	zzMyConsole;
 var bool	zzbBadConsole;
-// var Canvas zzCannibal;			// Old console
-// var font zzCanOldFont;			// Canvas messing checks
-// var byte zzCanOldStyle;			// And more
 
 // Anti Timing Variables
 var Inventory	zzAntiTimerList[32];
@@ -2548,24 +2524,6 @@ simulated function xxNN_ClientProjExplode( int ProjIndex, optional vector HitLoc
 		}
 	}
 	xxDisableCarcasses();
-}
-
-simulated function BetterVector GetBetterVector( vector SomeVector )
-{
-	local BetterVector Vec;
-	Vec.X = SomeVector.X;
-	Vec.Y = SomeVector.Y;
-	Vec.Z = SomeVector.Z;
-	return Vec;
-}
-
-simulated function vector GetVector( BetterVector SomeVector )
-{
-	local vector Vec;
-	Vec.X = SomeVector.X;
-	Vec.Y = SomeVector.Y;
-	Vec.Z = SomeVector.Z;
-	return Vec;
 }
 
 // Think about what you're doing.  Look at the bigger picture of it all, if you're able to.  This is a 15+ year old video game.
