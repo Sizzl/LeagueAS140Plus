@@ -1952,8 +1952,6 @@ function IGPlus_ApplyServerMove(bbServerMove SM) {
 	local float DuckChangePos;
 	local bool bDuckActual;
 
-	local bool bClientPaused;
-
 	debugServerMoveCallsReceived += 1;
 
 	if (bDeleteMe) {
@@ -1984,7 +1982,6 @@ function IGPlus_ApplyServerMove(bbServerMove SM) {
 	bAltFired      =             (SM.MiscData & 0x08000000) != 0;
 	bForceFire     =             (SM.MiscData & 0x04000000) != 0;
 	bForceAltFire  =             (SM.MiscData & 0x02000000) != 0;
-	bClientPaused  =             (SM.MiscData & 0x01000000) != 0;
 	MergeCount     =             (SM.MiscData & 0x00F80000) >> 19;
 	NewbRun        =             (SM.MiscData & 0x00040000) != 0;
 	NewbDuck       =             (SM.MiscData & 0x00020000) != 0;
@@ -2053,13 +2050,10 @@ function IGPlus_ApplyServerMove(bbServerMove SM) {
 	} else {
 		ServerDeltaTime = Level.TimeSeconds - ServerTimeStamp;
 		DeltaTime = SM.TimeStamp - CurrentTimeStamp;
-		if (zzUTPure.zzbPaused) {
-			if (SM.MoveDeltaTime > zzUTPure.LastPauseLength)
-				SM.MoveDeltaTime -= zzUTPure.LastPauseLength;
-			if (ServerDeltaTime > zzUTPure.LastPauseLength)
-				ServerDeltaTime = FMin(ServerDeltaTime, SM.MoveDeltaTime);
-			if (DeltaTime > zzUTPure.LastPauseLength)
-				DeltaTime = FMin(DeltaTime, SM.MoveDeltaTime);
+
+		if (Level.Pauser == "" && bWasPaused) {
+			ServerDeltaTime = FMin(ServerDeltaTime, SM.MoveDeltaTime);
+			DeltaTime = FMin(DeltaTime, SM.MoveDeltaTime);
 		}
 	}
 
@@ -2110,7 +2104,7 @@ function IGPlus_ApplyServerMove(bbServerMove SM) {
 		zzLastFallVelZ = SM.ClientVelocity.Z;
 
 	// Predict new position
-	if ((Level.Pauser == "") && bClientPaused == false && (DeltaTime > 0)) {
+	if ((Level.Pauser == "") && (DeltaTime > 0)) {
 		UndoExtrapolation();
 
 		if (bHidden && (IsInState('PlayerWalking') || IsInState('PlayerSwimming'))) {
@@ -3333,7 +3327,7 @@ function SendSavedMove(bbSavedMove Move, optional bbSavedMove OldMove) {
 	if (Move.bAltFire) MiscData = MiscData | 0x08000000;
 	if (Move.bForceFire) MiscData = MiscData | 0x04000000;
 	if (Move.bForceAltFire) MiscData = MiscData | 0x02000000;
-	if (Level.Pauser != "") MiscData = MiscData | 0x01000000;
+	// 0x01000000 unused
 	MiscData = MiscData | ((Move.IGPlus_MergeCount & 0x1F) << 19);
 	if (Move.bRun) MiscData = MiscData | 0x40000;
 	if (Move.bDuck) MiscData = MiscData | 0x20000;
