@@ -552,7 +552,6 @@ auto state Pickup
 
 defaultproperties
 {
-     bAlwaysRelevant=True
      bNewNet=True
      PickupViewMesh=LodMesh'Botpack.SASMD2hand'
      PickupViewScale=1.750000
