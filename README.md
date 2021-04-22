@@ -705,14 +705,14 @@ Extract the zipped files to your system folder.
 Remove any mention in your ServerPackages and ServerActors of TimTim's NewNet or Deepu's Ultimate NewNet.  
 Add the following lines to your server's **UnrealTournament.ini** under **[Engine.GameEngine]**:
 
-**ServerPackages=InstaGibPlus6**  
-**ServerActors=InstaGibPlus6.NewNetServer**  
-**ServerActors=InstaGibPlus6.PureStats**  
+**ServerPackages=InstaGibPlus6E**  
+**ServerActors=InstaGibPlus6E.NewNetServer**  
+**ServerActors=InstaGibPlus6E.PureStats**  
 
 <b>It is highly recommended to set your server's tickrate to 100.</b>
 
 # Usage
-For InstaGib, make sure the mutator **InstaGibPlus6.NewNetIG** is loaded via your map vote configuration or during server launch.
+For InstaGib, make sure the mutator **InstaGibPlus6E.NewNetIG** is loaded via your map vote configuration or during server launch.
 
 InstaGib+ has minimal weapons code and will load the default UT weapons if the NewNetIG mutator is not loaded, so it is absolutely unusable in normal weapons, make sure to use it only if your objective is to play or to run an InstaGib centered server.
 
@@ -1210,8 +1210,8 @@ What brightskin mode is allowed for clients.
 # Building
 
 1. Go to the installation directory of UT99 in a command shell
-2. Use `git clone https://github.com/utspect/InstaGibPlus InstaGibPlus6` to clone the repo
-3. Navigate to the newly created directory `InstaGibPlus6`
+2. Use `git clone https://github.com/utspect/InstaGibPlus InstaGibPlus6E` to clone the repo
+3. Navigate to the newly created directory `InstaGibPlus6E`
 4. Execute `build.bat`
 5. The result of the build process will be available in the `System` folder that is next to `build.bat`
 
