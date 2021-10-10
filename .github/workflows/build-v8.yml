@@ -38,17 +38,17 @@ jobs:
       - name: Checkout IG+
         uses: actions/checkout@v2
         with:
-          path: InstaGibPlus8B/
+          path: InstaGibPlus8C/
 
       - name: Extract Necessary Resources
         uses: DuckSoft/extract-7z-action@v1.0
         with:
-          pathSource: InstaGibPlus8B/Build/BuildEnv.zip
+          pathSource: InstaGibPlus8C/Build/BuildEnv.zip
           pathTarget: .
 
       # Runs a single command using the runners shell
       - name: Build IG+
-        run: InstaGibPlus8B/build.bat
+        run: InstaGibPlus8C/build.bat
 
       - name: Save UCC.log
         if: failure()
@@ -61,8 +61,8 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v2
         with:
-          name: InstaGibPlus8B
+          name: InstaGibPlus8C
           path: |
-            InstaGibPlus8B/System/
-            InstaGibPlus8B/LICENSE
-            InstaGibPlus8B/README.md
+            InstaGibPlus8C/System/
+            InstaGibPlus8C/LICENSE
+            InstaGibPlus8C/README.md
