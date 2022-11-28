@@ -848,6 +848,8 @@ function PreBeginPlay()
 
 function Mutate(string MutateString, PlayerPawn Sender)
 {
+	local TournamentWeapon TW;
+	
 	if (MutateString ~= "PurePlayerHelp")
 	{
 		Sender.ClientMessage("UTPure Stats Extended commands:");
