@@ -346,7 +346,50 @@ function bool MutatorBroadcastLocalizedMessage( Actor Sender, Pawn Receiver, out
 
 		}
 	}
-
+	// Let other mutators know the default Item name of replaced weapons, helps with old HUD replacement and chat mutators
+    if (OptionalObject!=None && Class<Weapon>(OptionalObject)!=None)
+    {
+    	switch (Caps(Class<Weapon>(OptionalObject).default.ItemName))
+    	{
+    		case "REDEEMER":
+    			OptionalObject = class'Botpack.WarHeadLauncher';
+    			break;
+    		case "SNIPER RIFLE":
+    			OptionalObject = class'Botpack.SniperRifle';
+    			break;
+    		case "ROCKET LAUNCHER":
+    			OptionalObject = class'Botpack.UT_Eightball';
+    			break;
+    		case "FLAK CANNON":
+    			OptionalObject = class'Botpack.UT_FlakCannon';
+    			break;
+    		case "MINIGUN":
+    			OptionalObject = class'Botpack.minigun2';
+    			break;
+    		case "RIPPER":
+    			OptionalObject = class'Botpack.Ripper';
+    			break;
+    		case "PULSE GUN":
+    			OptionalObject = class'Botpack.PulseGun';
+    			break;
+    		case "SHOCK RIFLE":
+    			OptionalObject = class'Botpack.ShockRifle';
+    			break;
+    		case "GES BIO RIFLE":
+    			OptionalObject = class'Botpack.UT_Biorifle';
+    			break;
+    		case "ENFORCER":
+    			OptionalObject = class'Botpack.Enforcer';
+    			break;
+    		case "IMPACT HAMMER":
+    			OptionalObject = class'Botpack.ImpactHammer';
+    			break;
+    		case "ENHANCED SHOCK RIFLE":
+    			OptionalObject = class'Botpack.SuperShockRifle';
+    			break;
+    		default:
+    	}
+    }
 	return Super.MutatorBroadcastLocalizedMessage(Sender, Receiver, Message, Switch, RelatedPRI_1, RelatedPRI_2, OptionalObject);
 }
 
@@ -815,6 +858,14 @@ function Mutate(string MutateString, PlayerPawn Sender)
 	{
 		Sender.ClientMessage(WelcomeMessage);
 	}
+	else if (MutateString ~= "WS")
+	{
+		ForEach AllActors(Class'TournamentWeapon', TW)
+		{
+			Sender.ClientMessage("TW:"@TW$", WS-"@TW.bWeaponStay$", SR-"@Level.Game.ShouldRespawn(TW));	
+			Log("TW:"@TW$", WS-"@TW.bWeaponStay);
+		}
+	}
 	if ( NextMutator != None )
 		NextMutator.Mutate(MutateString, Sender);
 }
@@ -829,6 +880,13 @@ function bool ReplaceWith(actor Other, string aClassName)
 	aClass = class<Actor>(DynamicLoadObject(aClassName, class'Class'));
 	if ( aClass != None )
 		A = Spawn(aClass, Other.Owner, Other.tag, Other.Location, Other.Rotation);
+
+	if (A.IsA('TournamentWeapon'))
+	{
+		log("RW:"@A$", WS:"@TournamentWeapon(A).bWeaponStay);
+		TournamentWeapon(A).SetWeaponStay();
+		log("RW:"@A$", SetWeaponStay called:"@TournamentWeapon(A).bWeaponStay);
+	}
 	if ( Other.IsA('Inventory') )
 	{
 		if ( Inventory(Other).MyMarker != None )
