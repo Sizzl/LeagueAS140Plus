@@ -281,6 +281,7 @@ struct IGPlus_ForcedSettings_Entry {
 var IGPlus_ForcedSettings_Entry IGPlus_ForcedSettings[128];
 var int IGPlus_ForcedSettings_Counter;
 var int IGPlus_ForcedSettings_Index;
+var bool IGPlus_ForcedSettings_Initialized;
 var bool IGPlus_ForcedSettings_Applied;
 
 var IGPlus_DamageEvent IGPlus_DamageEvent_First;
@@ -469,6 +470,7 @@ replication
 		Hold,
 		IGPlus_ForcedSettingsRetry,
 		IGPlus_ForcedSettingsOK,
+		IGPlus_ForcedSettings_InitOK,
 		PrintWeaponState,
 		ShowStats,
 		xxExplodeOther,
@@ -1115,6 +1117,7 @@ event Possess()
 		}
 
 		IGPlus_ForcedSettingsInit();
+		ClientMessage("Sending ForcedSettingsInit");
 	}
 
 	if (Role == ROLE_AutonomousProxy || (Role == ROLE_Authority && RemoteRole != ROLE_AutonomousProxy)) {
@@ -1147,6 +1150,11 @@ function bool IGPlus_DetermineDualButtonSwitchSetting() {
 function IGPlus_ForcedSettingsInit() {
 	IGPlus_ForcedSettings_Counter = 0;
 	ClientMessage("Forced Settings initialized", 'IGPlus');
+	IGPlus_ForcedSettings_InitOK();
+}
+
+function IGPlus_ForcedSettings_InitOK() {
+	IGPlus_ForcedSettings_Initialized = true;
 }
 
 function IGPlus_ForcedSettingRegister(string Key, string Value, int Mode) {
@@ -1822,7 +1830,8 @@ simulated function xxPureCAP(float TimeStamp, name newState, int MiscData, vecto
 
 	// Higor: keep track of Position prior to adjustment
 	// and stop current smoothed adjustment (if in progress).
-	IGPlus_PreAdjustLocation = Location;
+	if (bUpdatePosition == false)
+		IGPlus_PreAdjustLocation = Location;
 	if ( IGPlus_AdjustLocationAlpha > 0 )
 	{
 		IGPlus_AdjustLocationAlpha = 0;
@@ -1882,6 +1891,7 @@ function IGPlus_ClientReplayMove(IGPlus_SavedMove M) {
 
 	SetRotation(M.Rotation);
 	ViewRotation = M.IGPlus_SavedViewRotation;
+	bDodging = M.SavedDodging;
 
 	if (M.Momentum != vect(0,0,0)) {
 		if (Physics == PHYS_Walking)
@@ -1937,6 +1947,8 @@ function ClientUpdatePosition()
 	local int realbRun, realbDuck;
 	local bool bRealJump;
 	local rotator RealViewRotation, RealRotation;
+	local EDodgeDir RealDodgeDir;
+	local float RealDodgeClickTimer;
 
 	local float AdjustDistance;
 	local vector PostAdjustLocation;
@@ -1947,6 +1959,8 @@ function ClientUpdatePosition()
 	bRealJump = bPressedJump;
 	RealRotation = Rotation;
 	RealViewRotation = ViewRotation;
+	RealDodgeDir = DodgeDir;
+	RealDodgeClickTimer = DodgeClickTimer;
 	bUpdating = true;
 
 	IGPlus_FreeAcknowledgedMoves(CurrentTimeStamp);
@@ -1992,6 +2006,8 @@ function ClientUpdatePosition()
 	bPressedJump = bRealJump;
 	SetRotation( RealRotation);
 	ViewRotation = RealViewRotation;
+	DodgeDir = RealDodgeDir;
+	DodgeClickTimer = RealDodgeClickTimer;
 	zzbFakeUpdate = true;
 
 	UpdatePing();
@@ -3773,6 +3789,7 @@ function xxReplicateMove(
 		// Set this move's data.
 		NewMove.TimeStamp = Level.TimeSeconds;
 
+		NewMove.SavedDodging = bDodging;
 		NewMove.DodgeMove = DodgeMove;
 		if (DodgeMove > DODGE_None && DodgeMove < DODGE_Active)
 			NewMove.DodgeIndex = 0;
@@ -3962,10 +3979,10 @@ exec function ThrowWeapon()
 		return;
 
 	if( Weapon==None || (Weapon.Class==Level.Game.BaseMutator.MutatedDefaultWeapon())
-		|| !Weapon.bCanThrow || Weapon.IsInState('Idle') == false )
+		|| !Weapon.bCanThrow || (IGPlus_UseFastWeaponSwitch == false && Weapon.IsInState('Idle') == false) )
 		return;
 
-	Weapon.Velocity = Vector(ViewRotation) * vect(1,1,0) * zzThrowVelocity + vect(0,0,220);
+	Weapon.Velocity = Normal(Vector(ViewRotation) * vect(1,1,0)) * zzThrowVelocity + vect(0,0,220);
 	Weapon.bTossedOut = true;
 	TossWeapon();
 	if ( Weapon == None )
@@ -5056,17 +5073,19 @@ event ServerTick(float DeltaTime) {
 		DelayedNavPoint = DelayedNavPoint.NextNavigationPoint;
 	}
 
-	if (IGPlus_ForcedSettings_Index < Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings))) {
-		if (zzUTPure.GetForcedSettingKey(IGPlus_ForcedSettings_Index) != "") {
-			IGPlus_ForcedSettings_Counter++;
-			IGPlus_ForcedSettingRegister(
-				zzUTPure.GetForcedSettingKey(IGPlus_ForcedSettings_Index),
-				zzUTPure.GetForcedSettingValue(IGPlus_ForcedSettings_Index),
-				zzUTPure.GetForcedSettingMode(IGPlus_ForcedSettings_Index));
+	if (IGPlus_ForcedSettings_Initialized) {
+		if (IGPlus_ForcedSettings_Index < Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings))) {
+			if (zzUTPure.GetForcedSettingKey(IGPlus_ForcedSettings_Index) != "") {
+				IGPlus_ForcedSettings_Counter++;
+				IGPlus_ForcedSettingRegister(
+					zzUTPure.GetForcedSettingKey(IGPlus_ForcedSettings_Index),
+					zzUTPure.GetForcedSettingValue(IGPlus_ForcedSettings_Index),
+					zzUTPure.GetForcedSettingMode(IGPlus_ForcedSettings_Index));
+			}
+			IGPlus_ForcedSettings_Index++;
+			if (IGPlus_ForcedSettings_Index == Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings)))
+				IGPlus_ForcedSettingsApply(IGPlus_ForcedSettings_Counter);
 		}
-		IGPlus_ForcedSettings_Index++;
-		if (IGPlus_ForcedSettings_Index == Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings)))
-			IGPlus_ForcedSettingsApply(IGPlus_ForcedSettings_Counter);
 	}
 
 	if (bIsCrouching) {
@@ -5372,7 +5391,7 @@ ignores SeePlayer, HearNoise, Bump;
 
 		if (bDodging || DodgeDir == DODGE_Done) {
 			DodgeDir = DODGE_Done;
-			DodgeClickTimer = FMin(DodgeClickTimer, 0.0);
+			DodgeClickTimer = 0.0;
 			bDodging = false;
 		} else {
 			DodgeDir = DODGE_None;
@@ -7247,7 +7266,7 @@ event PostRender( canvas zzCanvas )
 	xxRenderLogo(zzCanvas);
 	xxCleanAvars();
 
-	if (Player.CurrentNetspeed != zzNetspeed) {
+	if (IGPlus_ForcedSettings_Applied && Player.CurrentNetspeed != zzNetspeed) {
 		Netspeed = int(ConsoleCommand("get ini:Engine.Engine.NetworkDevice MaxClientRate"));
 		if (Netspeed < Settings.DesiredNetspeed) {
 			ConsoleCommand("set ini:Engine.Engine.NetworkDevice MaxClientRate"@Settings.DesiredNetspeed);
