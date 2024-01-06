@@ -83,6 +83,15 @@ function ProcessTraceHit(Actor Other, Vector HitLocation, Vector HitNormal, Vect
 	}
 }
 
+function bool HandlePickupQuery( inventory Item )
+{
+	if (GetWeaponSettings().EnforcerAllowDouble) {
+		return super.HandlePickupQuery(Item);
+	} else {
+		return super(TournamentWeapon).HandlePickupQuery(Item);
+	}
+}
+
 function SetSwitchPriority(pawn Other)
 {	// Make sure "old" priorities are kept.
 	local int i;
@@ -136,10 +145,16 @@ simulated function PlaySelect() {
 }
 
 simulated function TweenDown() {
+	local float TweenTime;
+
+	TweenTime = 0.05;
+	if (Owner != none && Owner.IsA('bbPlayer') && bbPlayer(Owner).IGPlus_UseFastWeaponSwitch)
+		TweenTime = 0.00;
+
 	if ( IsAnimating() && (AnimSequence != '') && (GetAnimGroup(AnimSequence) == 'Select') )
 		TweenAnim( AnimSequence, AnimFrame * GetWeaponSettings().EnforcerDownTime );
 	else
-		PlayAnim('Down', GetWeaponSettings().EnforcerDownAnimSpeed(), 0.05);
+		PlayAnim('Down', GetWeaponSettings().EnforcerDownAnimSpeed(), TweenTime);
 }
 
 defaultproperties {

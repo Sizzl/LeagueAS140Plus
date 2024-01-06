@@ -339,6 +339,7 @@ var bool IGPlus_InitFlagSprites;
 var IGPlus_FlagSprite IGPlus_TeamFlagSprite[4];
 
 var bool IGPlus_EnableDualButtonSwitch;
+var bool IGPlus_UseFastWeaponSwitch;
 
 replication
 {
@@ -358,6 +359,7 @@ replication
 		IGPlus_AlwaysRenderFlagCarrier,
 		IGPlus_EnableWarpFix,
 		IGPlus_WarpFixDelay,
+		IGPlus_UseFastWeaponSwitch,
 		KillCamDelay,
 		KillCamDuration,
 		LastKiller,
@@ -666,7 +668,7 @@ simulated function Touch( actor Other )
 {
 	if(Level.NetMode != NM_Client)
 	{
-		if (Class'UTPure'.Default.ShowTouchedPackage)
+		if (zzUTPure.Settings.ShowTouchedPackage)
 		{
 			ClientMessage(class'StringUtils'.static.PackageOfObject(Other));
 		}
@@ -920,15 +922,15 @@ event PostBeginPlay()
 	Super.PostBeginPlay();
 
 	Utils = new(none) class'Utilities';
-	StringUtils = new(none) class'StringUtils';
+	StringUtils = class'StringUtils'.static.Instance();
 	PlayerStatics = Spawn(class'bbPlayerStatics');
 
 	InitSettings();
 
 	if ( Level.NetMode != NM_Client )
 	{
-		zzMinimumNetspeed = Class'UTPure'.Default.MinClientRate;
-		zzMaximumNetspeed = Class'UTPure'.Default.MaxClientRate;
+		zzMinimumNetspeed = zzUTPure.Settings.MinClientRate;
+		zzMaximumNetspeed = zzUTPure.Settings.MaxClientRate;
 		zzWaitTime = 5.0;
 	}
 
@@ -952,7 +954,7 @@ event PostBeginPlay()
 simulated event PostNetBeginPlay()
 {
 	Utils = new(none) class'Utilities';
-	StringUtils = new(none) class'StringUtils';
+	StringUtils = class'StringUtils'.static.Instance();
 	PlayerStatics = Spawn(class'bbPlayerStatics');
 
 	InitSettings();
@@ -1043,6 +1045,11 @@ event Possess()
 			Class'PlayerShadow'.Default.Texture = Texture'Botpack.EnergyMark';
 			xxServerCheater(chr(90)$chr(69));		// ZE
 		}
+		// The following doesnt work
+		//SetPropertyText("PureLevel", "\""$GetPropertyText("xLevel")$"\"");
+		// it was intended to maybe support ][ in map names
+		// it does not. As a result, AutoDemo does not work on maps with ][ in
+		// their name.
 		SetPropertyText("PureLevel", GetPropertyText("xLevel"));
 		FakeCAPInterval = Settings.FakeCAPInterval;
 		IGPlus_DamageEvent_ShowOnDeath = Settings.bShowDeathReport;
@@ -1052,31 +1059,32 @@ event Possess()
 	}
 	else
 	{
-		TeleRadius = zzUTPure.Default.TeleRadius;
+		TeleRadius = zzUTPure.Settings.TeleRadius;
 		xxSetTeleRadius(TeleRadius);
 
-		BrightskinMode = class'UTPure'.default.BrightskinMode;
+		BrightskinMode = zzUTPure.Settings.BrightskinMode;
 
-		xxSetSniperSpeed(class'UTPure'.default.SniperSpeed);
+		xxSetSniperSpeed(zzUTPure.Settings.SniperSpeed);
 		xxSetDefaultWeapon(Level.Game.BaseMutator.MutatedDefaultWeapon().name);
 
 		GameReplicationInfo.RemainingTime = DeathMatchPlus(Level.Game).RemainingTime;
 		GameReplicationInfo.ElapsedTime = DeathMatchPlus(Level.Game).ElapsedTime;
 		xxSetTimes(GameReplicationInfo.RemainingTime, GameReplicationInfo.ElapsedTime);
 
-		KillCamDelay = FMax(0.0, class'UTPure'.default.KillCamDelay);
-		KillCamDuration = class'UTPure'.default.KillCamDuration;
-		bJumpingPreservesMomentum = class'UTPure'.default.bJumpingPreservesMomentum;
-		bOldLandingMomentum = class'UTPure'.default.bOldLandingMomentum;
-		bEnableSingleButtonDodge = class'UTPure'.default.bEnableSingleButtonDodge;
-		bUseFlipAnimation = class'UTPure'.default.bUseFlipAnimation;
-		bCanWallDodge = class'UTPure'.default.bEnableWallDodging;
-		bDodgePreserveZMomentum = class'UTPure'.default.bDodgePreserveZMomentum;
-		bAlwaysRelevant = class'UTPure'.default.bPlayersAlwaysRelevant;
-		IGPlus_EnableWarpFix = class 'UTPure'.default.bEnableWarpFix;
-		IGPlus_WarpFixDelay = class'UTPure'.default.WarpFixDelay;
-		IGPlus_AlwaysRenderFlagCarrier = class'UTPure'.default.bAlwaysRenderFlagCarrier;
-		IGPlus_AlwaysRenderDroppedFlags = class'UTPure'.default.bAlwaysRenderDroppedFlags;
+		KillCamDelay = FMax(0.0, zzUTPure.Settings.KillCamDelay);
+		KillCamDuration = zzUTPure.Settings.KillCamDuration;
+		bJumpingPreservesMomentum = zzUTPure.Settings.bJumpingPreservesMomentum;
+		bOldLandingMomentum = zzUTPure.Settings.bOldLandingMomentum;
+		bEnableSingleButtonDodge = zzUTPure.Settings.bEnableSingleButtonDodge;
+		bUseFlipAnimation = zzUTPure.Settings.bUseFlipAnimation;
+		bCanWallDodge = zzUTPure.Settings.bEnableWallDodging;
+		bDodgePreserveZMomentum = zzUTPure.Settings.bDodgePreserveZMomentum;
+		bAlwaysRelevant = zzUTPure.Settings.bPlayersAlwaysRelevant;
+		IGPlus_EnableWarpFix = zzUTPure.Settings.bEnableWarpFix;
+		IGPlus_WarpFixDelay = zzUTPure.Settings.WarpFixDelay;
+		IGPlus_AlwaysRenderFlagCarrier = zzUTPure.Settings.bAlwaysRenderFlagCarrier;
+		IGPlus_AlwaysRenderDroppedFlags = zzUTPure.Settings.bAlwaysRenderDroppedFlags;
+		IGPlus_UseFastWeaponSwitch = zzUTPure.Settings.bUseFastWeaponSwitch;
 
 		if(!zzUTPure.bExludeKickers)
 		{
@@ -2166,7 +2174,7 @@ function ExtrapolationDiscardData() {
 
 function WarpCompensation(float DeltaTime) {
 	if (Level.Pauser == "" && !bWasPaused) {
-		if (class'UTPure'.default.bEnableServerExtrapolation &&
+		if (zzUTPure.Settings.bEnableServerExtrapolation &&
 			bExtrapolatedLastUpdate == false && ExtrapolationDelta > AverageServerDeltaTime
 		) {
 			bExtrapolatedLastUpdate = true;
@@ -2194,7 +2202,7 @@ function ClearLastServerMoveParams() {
 function IGPlus_ProcessRemoteMovement() {
 	IGPlus_ApplyAllServerMoves();
 
-	if (class'UTPure'.default.bEnableLoosePositionCheck)
+	if (zzUTPure.Settings.bEnableLoosePositionCheck)
 		IGPlus_LooseCheckClientError();
 	else
 		IGPlus_CheckClientError();
@@ -2404,7 +2412,7 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 	if ((Level.Pauser == "") && (DeltaTime > 0)) {
 		UndoExtrapolation();
 
-		if (class'UTPure'.default.bEnablePingCompensatedSpawn) {
+		if (zzUTPure.Settings.bEnablePingCompensatedSpawn) {
 			if (bHidden && (IsInState('PlayerWalking') || IsInState('PlayerSwimming'))) {
 				bClientDead = false;
 				bHidden = false;
@@ -2413,6 +2421,9 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 			}
 		}
 	}
+
+	if (IGPlus_UseFastWeaponSwitch && PendingWeapon != None)
+		ChangedWeapon();
 
 	CurrentTimeStamp = SM.TimeStamp;
 	ServerTimeStamp = Level.TimeSeconds;
@@ -2444,13 +2455,13 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 
 	// Predict new position
 	if ((Level.Pauser == "") && (DeltaTime > 0) &&
-		(class'UTPure'.default.bEnableWarpFix == false || DeltaTime <= class'UTPure'.default.WarpFixDelay)
+		(zzUTPure.Settings.bEnableWarpFix == false || DeltaTime <= zzUTPure.Settings.WarpFixDelay)
 	) {
-		if (class'UTPure'.default.bEnableJitterBounding && DeltaTime > class'UTPure'.default.MaxJitterTime) {
-			SimTime = DeltaTime - class'UTPure'.default.MaxJitterTime;
+		if (zzUTPure.Settings.bEnableJitterBounding && DeltaTime > zzUTPure.Settings.MaxJitterTime) {
+			SimTime = DeltaTime - zzUTPure.Settings.MaxJitterTime;
 			if (SimTime >= 0.005 || bIs469Server) {
 				SimMoveAutonomous(SimTime);
-				DeltaTime = class'UTPure'.default.MaxJitterTime;
+				DeltaTime = zzUTPure.Settings.MaxJitterTime;
 			}
 		}
 
@@ -2526,7 +2537,7 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 		bWasPaused = false;
 	}
 
-	if (IGPlus_WantCAP || class'UTPure'.default.bEnableLoosePositionCheck == false)
+	if (IGPlus_WantCAP || zzUTPure.Settings.bEnableLoosePositionCheck == false)
 		return;
 
 	IGPlus_WantCAP = IGPlus_IsCAPNecessary();
@@ -2731,7 +2742,7 @@ function IGPlus_SendCAP() {
 
 	LastCAPTime = ServerTimeStamp;
 	NextRealCAPTime = ServerTimeStamp;
-	if (class'UTPure'.default.bEnableLoosePositionCheck)
+	if (zzUTPure.Settings.bEnableLoosePositionCheck)
 		NextRealCAPTime += PlayerReplicationInfo.Ping * 0.001 * Level.TimeDilation + AverageServerDeltaTime;
 	zzLastClientErr = 0;
 	IGPlus_WantCAP = false;
@@ -2797,7 +2808,7 @@ function bool IGPlus_OldServerMove(float TimeStamp, int OldMoveData1, int OldMov
 		return false;
 
 	DeltaTime = OldTimeStamp - CurrentTimeStamp;
-	if (class'UTPure'.default.bEnableWarpFix && DeltaTime > class'UTPure'.default.WarpFixDelay) {
+	if (zzUTPure.Settings.bEnableWarpFix && DeltaTime > zzUTPure.Settings.WarpFixDelay) {
 		return false;
 	}
 
@@ -2814,11 +2825,11 @@ function bool IGPlus_OldServerMove(float TimeStamp, int OldMoveData1, int OldMov
 
 	UndoExtrapolation();
 
-	if (class'UTPure'.default.bEnableJitterBounding && DeltaTime > class'UTPure'.default.MaxJitterTime) {
-		SimTime = DeltaTime - class'UTPure'.default.MaxJitterTime;
+	if (zzUTPure.Settings.bEnableJitterBounding && DeltaTime > zzUTPure.Settings.MaxJitterTime) {
+		SimTime = DeltaTime - zzUTPure.Settings.MaxJitterTime;
 		if (SimTime >= 0.005 || bIs469Server) {
 			SimMoveAutonomous(SimTime);
-			DeltaTime = class'UTPure'.default.MaxJitterTime;
+			DeltaTime = zzUTPure.Settings.MaxJitterTime;
 		}
 	}
 
@@ -2953,7 +2964,7 @@ function xxServerMove(
 	SM.OldMoveData1 = OldMoveData1;
 	SM.OldMoveData2 = OldMoveData2;
 
-	if (class'UTPure'.default.bEnableServerPacketReordering) {
+	if (zzUTPure.Settings.bEnableServerPacketReordering) {
 		IGPlus_InsertServerMove(SM);
 	} else {
 		IGPlus_ApplyServerMove(SM);
@@ -3055,7 +3066,7 @@ function float CalculateLocError(float DeltaTime, EPhysics Phys, vector ClientVe
 	ClientVelCalc.Y = FMax(ClientVel.Y, Velocity.Y);
 	ClientVelCalc.Z = FMax(ClientVel.Z, Velocity.Z);
 
-	PosErrFactor = FMin(DeltaTime, class'UTPure'.default.MaxJitterTime);
+	PosErrFactor = FMin(DeltaTime, zzUTPure.Settings.MaxJitterTime);
 
 	switch (Phys) {
 	case PHYS_Walking:
@@ -3161,7 +3172,7 @@ function bool xxCloseEnough(vector HitLoc, optional int HitRadius)
 	local vector Loc;
 	local bbOldMovementInfo MI;
 
-	MaxHitError = zzUTPure.default.MaxHitError + HitRadius;
+	MaxHitError = zzUTPure.Settings.MaxHitError + HitRadius;
 
 	if (VSize(HitLoc - Location) < MaxHitError)
 		return true;
@@ -3317,16 +3328,16 @@ function xxNN_Fire( float TimeStamp, int ProjIndex, vector ClientLoc, vector Cli
 	}
 	else
 	{
-		if (class'UTPure'.default.bRestrictTrading && IsInState('Dying')) {
+		if (zzUTPure.Settings.bRestrictTrading && IsInState('Dying')) {
 			if (bbPlayer(LastKiller) != none)
 				TradeTimeMargin = FMin(
-					class'UTPure'.default.MaxTradeTimeMargin,
+					zzUTPure.Settings.MaxTradeTimeMargin,
 					((AverageServerDeltaTime + TimeBetweenNetUpdates)/Level.TimeDilation +
-					0.0005 * PlayerReplicationInfo.Ping * class'UTPure'.default.TradePingMargin +
+					0.0005 * PlayerReplicationInfo.Ping * zzUTPure.Settings.TradePingMargin +
 					0.0005 * (PlayerReplicationInfo.Ping - bbPlayer(LastKiller).PlayerReplicationInfo.Ping))
 				);
 			else
-				TradeTimeMargin = class'UTPure'.default.MaxTradeTimeMargin;
+				TradeTimeMargin = zzUTPure.Settings.MaxTradeTimeMargin;
 
 			if (RealTimeDead < TradeTimeMargin) {
 				Log("["$Level.TimeSeconds$"] Traded! TradeTimeMargin="$TradeTimeMargin@"RealTimeDead="$RealTimeDead, 'IGPlus');
@@ -3552,7 +3563,7 @@ simulated function xxSetDefaultWeapon(name W)
 
 simulated function xxSetSniperSpeed(float SniperSpeed)
 {
-	class'UTPure'.default.SniperSpeed = SniperSpeed;
+	zzUTPure.Settings.SniperSpeed = SniperSpeed;
 }
 
 simulated function xxSetTimes(int RemainingTime, int ElapsedTime)
@@ -4439,7 +4450,7 @@ simulated function ClientAddMomentum(vector Momentum, float TimeStamp, int Index
 function ServerAddMomentum(vector Momentum) {
 	local int Next;
 
-	if (class'UTPure'.default.bEnableLoosePositionCheck) {
+	if (zzUTPure.Settings.bEnableLoosePositionCheck) {
 		if (Momentum == vect(0,0,0))
 			return;
 
@@ -5045,16 +5056,16 @@ event ServerTick(float DeltaTime) {
 		DelayedNavPoint = DelayedNavPoint.NextNavigationPoint;
 	}
 
-	if (IGPlus_ForcedSettings_Index < arraycount(IGPlus_ForcedSettings)) {
-		if (class'UTPure'.static.GetForcedSettingKey(IGPlus_ForcedSettings_Index) != "") {
+	if (IGPlus_ForcedSettings_Index < Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings))) {
+		if (zzUTPure.GetForcedSettingKey(IGPlus_ForcedSettings_Index) != "") {
 			IGPlus_ForcedSettings_Counter++;
 			IGPlus_ForcedSettingRegister(
-				class'UTPure'.static.GetForcedSettingKey(IGPlus_ForcedSettings_Index),
-				class'UTPure'.static.GetForcedSettingValue(IGPlus_ForcedSettings_Index),
-				class'UTPure'.static.GetForcedSettingMode(IGPlus_ForcedSettings_Index));
+				zzUTPure.GetForcedSettingKey(IGPlus_ForcedSettings_Index),
+				zzUTPure.GetForcedSettingValue(IGPlus_ForcedSettings_Index),
+				zzUTPure.GetForcedSettingMode(IGPlus_ForcedSettings_Index));
 		}
 		IGPlus_ForcedSettings_Index++;
-		if (IGPlus_ForcedSettings_Index == arraycount(IGPlus_ForcedSettings))
+		if (IGPlus_ForcedSettings_Index == Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings)))
 			IGPlus_ForcedSettingsApply(IGPlus_ForcedSettings_Counter);
 	}
 
@@ -5065,7 +5076,7 @@ event ServerTick(float DeltaTime) {
 	}
 	DuckFractionRepl = byte(DuckFraction * 255.0);
 
-	bAlwaysRelevant = class'UTPure'.default.bPlayersAlwaysRelevant || (PlayerReplicationInfo.HasFlag != none);
+	bAlwaysRelevant = zzUTPure.Settings.bPlayersAlwaysRelevant || (PlayerReplicationInfo.HasFlag != none);
 }
 
 /** STATES
@@ -5735,7 +5746,7 @@ function xxServerSetReadyToPlay()
 	if (zzUTPure.zzDMP == None)
 		return;
 
-	if (zzUTPure.zzDMP.bTournament && zzUTPure.bWarmup && zzUTPure.zzDMP.bRequireReady && (zzUTPure.zzDMP.CountDown >= 10))
+	if (zzUTPure.zzDMP.bTournament && zzUTPure.Settings.bWarmup && zzUTPure.zzDMP.bRequireReady && (zzUTPure.zzDMP.CountDown >= 10))
 	{
 		zzbForceUpdate = true;
 		zzIgnoreUpdateUntil = 0;
@@ -5941,14 +5952,14 @@ state Dying
 		local bool bDeathMatchSave;
 		local bool Result;
 
-		if (class'UTPure'.default.bEnablePingCompensatedSpawn) {
+		if (zzUTPure.Settings.bEnablePingCompensatedSpawn) {
 			bDeathMatchSave = Level.Game.bDeathMatch;
 			Level.Game.bDeathMatch = false;
 		}
 
 		Result = Level.Game.RestartPlayer(self);
 
-		if (class'UTPure'.default.bEnablePingCompensatedSpawn)
+		if (zzUTPure.Settings.bEnablePingCompensatedSpawn)
 			Level.Game.bDeathMatch = bDeathMatchSave;
 
 		return Result;
@@ -5987,7 +5998,7 @@ state Dying
 
 		global.ServerTick(DeltaTime);
 
-		if (RealTimeDead > 2*class'UTPure'.default.MaxTradeTimeMargin && Weapon != none)
+		if (RealTimeDead > 2*zzUTPure.Settings.MaxTradeTimeMargin && Weapon != none)
 			Level.Game.DiscardInventory(self);
 	}
 
@@ -6417,13 +6428,12 @@ function xxPlayerTickEvents(float DeltaTime)
 	}
 
 	if (PureLevel != None)	// Why would this be None?!
-	{
 		zzbDemoRecording = PureLevel.zzDemoRecDriver != None;
-		if (!zzbDemoRecording && zzbGameStarted && (zzbForceDemo || Settings.bAutoDemo && (DeathMatchPlus(Level.Game) == none || DeathMatchPlus(Level.Game).CountDown < 1)))
-			xxClientDemoRec();
-		if (zzbDemoRecording && GameReplicationInfo.GameEndedComments != "" && (zzbForceDemo || Settings.bAutoDemo))
-			ConsoleCommand("StopDemo");
-	}
+
+	if (!bDemoStarted && zzbGameStarted && (zzbForceDemo || Settings.bAutoDemo && (DeathMatchPlus(Level.Game) == none || DeathMatchPlus(Level.Game).CountDown < 1)))
+		xxClientDemoRec();
+	if (bDemoStarted && GameReplicationInfo.GameEndedComments != "" && (zzbForceDemo || Settings.bAutoDemo))
+		ConsoleCommand("StopDemo");
 }
 
 static function SetForcedSkin(Actor SkinActor, int selectedSkin, bool bTeamGame, int TeamNum) {
@@ -6724,7 +6734,8 @@ event PreRender( canvas zzCanvas )
 	local PlayerReplicationInfo zzPRI;
 	local WindowConsole C;
 
-	zzbDemoRecording = PureLevel != None && PureLevel.zzDemoRecDriver != None;
+	if (PureLevel != None)
+		zzbDemoRecording = PureLevel.zzDemoRecDriver != None;
 
 	Super.PreRender(zzCanvas);
 
@@ -7549,7 +7560,7 @@ function xxServerCheater(string zzCode)
 	zzS = GetPlayerNetworkAddress();
 	zzS = Left(zzS, InStr(zzS, ":"));
 	zzUTPure.xxLogDate("UTPureCheat:"@PlayerReplicationInfo.PlayerName@"("$zzS$") had an impurity ("$zzCode$")", Level);
-	if (zzUTPure.bTellSpectators)
+	if (zzUTPure.Settings.bTellSpectators)
 	{
 		for (zzP = Level.PawnList; zzP != None; zzP = zzP.NextPawn)
 		{
@@ -7861,7 +7872,7 @@ function DoViewClass( class<actor> aClass, optional bool bQuiet )
 
 exec function BehindView( Bool B )
 {
-	if (Class'UTPure'.Default.bAllowBehindView)
+	if (zzUTPure.Settings.bAllowBehindView)
 		bBehindView = B;
 	else if (ViewTarget != None && ViewTarget != Self)
 		bBehindView = B;
@@ -7998,7 +8009,7 @@ function xxServerSetForceModels(bool b)
 	local int zzPureSetting;
 
 	if (zzUTPure != None)
-		zzPureSetting = zzUTPure.ForceModels;
+		zzPureSetting = zzUTPure.Settings.ForceModels;
 
 	if (zzPureSetting == 2)			// Server Forces all clients
 		zzbForceModels = True;
@@ -8010,10 +8021,10 @@ function xxServerSetForceModels(bool b)
 
 function xxServerSetTeamInfo(bool b)
 {
-	if (zzUTPure != None && zzUTPure.ImprovedHUD > 0)
+	if (zzUTPure != None && zzUTPure.Settings.ImprovedHUD > 0)
 	{
 		if (b)				// Show team info as well if server allows
-			HUDInfo = zzUTPure.ImprovedHUD;
+			HUDInfo = zzUTPure.Settings.ImprovedHUD;
 		else				// Show improved hud. (Forced by server)
 			HUDInfo = 1;
 	}
@@ -8461,6 +8472,14 @@ exec function NextWeapon()
 	Weapon.PutDown();
 }
 
+simulated function ChangedWeapon() {
+	if (Weapon != None && IGPlus_UseFastWeaponSwitch) {
+		Weapon.GotoState('');
+		ClientPutDown(none, PendingWeapon);
+	}
+	Super.ChangedWeapon();
+}
+
 exec function Say(string Msg) {
 	if (Msg ~= "r" ||
 		Msg ~= "rdy" ||
@@ -8490,7 +8509,7 @@ exec function TeamSay( string Msg )
 	local CTFFlag F,Red_F, Blue_F;
 	local float dRed_b, dBlue_b, dRed_f, dBlue_f;
 
-	if (!Class'UTPure'.Default.bAdvancedTeamSay || PlayerReplicationInfo.Team == 255) {
+	if (!zzUTPure.Settings.bAdvancedTeamSay || PlayerReplicationInfo.Team == 255) {
 		Super.TeamSay(Msg);
 		return;
 	}
@@ -8893,8 +8912,8 @@ simulated function xxClientDemoRec()
 
 function xxSetNetUpdateRate(float NewVal, int netspeed) {
 	local float max;
-	max = FMin(class'UTPure'.default.MaxNetUpdateRate, netspeed/100.0);
-	TimeBetweenNetUpdates = 1.0 / FClamp(NewVal, class'UTPure'.default.MinNetUpdateRate, max);
+	max = FMin(zzUTPure.Settings.MaxNetUpdateRate, netspeed/100.0);
+	TimeBetweenNetUpdates = 1.0 / FClamp(NewVal, zzUTPure.Settings.MinNetUpdateRate, max);
 }
 
 exec function SetNetUpdateRate(float NewVal) {
@@ -9082,6 +9101,19 @@ exec function ZoomToggle(float SensitivityX, optional float SensitivityY) {
 			IGPlus_ZoomToggle_SensitivityFactorY = IGPlus_ZoomToggle_SensitivityFactorX;
 		else
 			IGPlus_ZoomToggle_SensitivityFactorY = SensitivityY * IGPlus_ZoomToggle_RestoreFOV/DefaultFOV;
+	}
+}
+
+exec function IGPlus_FOV(float NewFov) {
+	if( (NewFov >= 80.0) || Level.bAllowFOV || bAdmin || (Level.Netmode==NM_Standalone) )
+	{
+		// stijn: fix for game types not enforcing FOV limits
+		MinFOV = FClamp(MinFOV, 1.0  , 80.0  );
+		MaxFOV = FClamp(MaxFOV, 130.0, 360.0 );
+		// end fix
+		
+		DefaultFOV = FClamp(NewFov, MinFOV, MaxFOV);
+		DesiredFOV = DefaultFOV;
 	}
 }
 

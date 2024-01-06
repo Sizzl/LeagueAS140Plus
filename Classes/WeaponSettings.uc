@@ -30,6 +30,7 @@ var config float EightballDownTime;
 var config float RocketDamage;
 var config float RocketHurtRadius;
 var config float RocketMomentum;
+var config float RocketSpreadSpacingDegrees;
 var config float GrenadeDamage;
 var config float GrenadeHurtRadius;
 var config float GrenadeMomentum;
@@ -95,6 +96,7 @@ var config float EnforcerSelectTime;
 var config float EnforcerDownTime;
 var config float EnforcerDamage;
 var config float EnforcerMomentum;
+var config bool EnforcerAllowDouble;
 
 var config float HammerSelectTime;
 var config float HammerDownTime;
@@ -144,6 +146,7 @@ defaultproperties
 	RocketDamage=75
 	RocketHurtRadius=220
 	RocketMomentum=1.0
+	RocketSpreadSpacingDegrees=3.6
 	GrenadeDamage=80
 	GrenadeHurtRadius=200
 	GrenadeMomentum=1.0
@@ -209,6 +212,7 @@ defaultproperties
 	EnforcerDownTime=0.266667
 	EnforcerDamage=17
 	EnforcerMomentum=1.0
+	EnforcerAllowDouble=True
 
 	HammerSelectTime=0.566667
 	HammerDownTime=0.166667

@@ -135,7 +135,7 @@ state FireRockets
 				if (bTightWad) {
 					FireRot.Yaw = AdjustedAim.Yaw;
 				} else {
-					FireRot.Yaw = AdjustedAim.Yaw + Spread*660.0;
+					FireRot.Yaw = AdjustedAim.Yaw + Spread*WSettings.RocketSpreadSpacingDegrees*(65536.0/360.0);
 				}
 
 				STM.PlayerFire(PawnOwner, 16);		// 16 = Rockets
@@ -231,10 +231,16 @@ simulated function PlaySelect() {
 }
 
 simulated function TweenDown() {
+	local float TweenTime;
+
+	TweenTime = 0.05;
+	if (Owner != none && Owner.IsA('bbPlayer') && bbPlayer(Owner).IGPlus_UseFastWeaponSwitch)
+		TweenTime = 0.00;
+
 	if ( IsAnimating() && (AnimSequence != '') && (GetAnimGroup(AnimSequence) == 'Select') )
 		TweenAnim( AnimSequence, AnimFrame * GetWeaponSettings().EightballDownTime );
 	else
-		PlayAnim('Down', GetWeaponSettings().EightballDownAnimSpeed(), 0.05);
+		PlayAnim('Down', GetWeaponSettings().EightballDownAnimSpeed(), TweenTime);
 }
 
 defaultproperties {

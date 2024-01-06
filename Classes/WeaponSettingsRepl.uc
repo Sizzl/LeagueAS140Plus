@@ -16,6 +16,7 @@ var float EightballDownTime;
 var float RocketDamage;
 var float RocketHurtRadius;
 var float RocketMomentum;
+var float RocketSpreadSpacingDegrees;
 var float GrenadeDamage;
 var float GrenadeHurtRadius;
 var float GrenadeMomentum;
@@ -81,6 +82,7 @@ var float EnforcerSelectTime;
 var float EnforcerDownTime;
 var float EnforcerDamage;
 var float EnforcerMomentum;
+var bool EnforcerAllowDouble;
 
 var float HammerSelectTime;
 var float HammerDownTime;
@@ -181,6 +183,7 @@ replication {
 		EnforcerDownTime,
 		EnforcerDamage,
 		EnforcerMomentum,
+		EnforcerAllowDouble,
 
 		HammerSelectTime,
 		HammerDownTime,
@@ -366,6 +369,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	RocketDamage = S.RocketDamage;
 	RocketHurtRadius = S.RocketHurtRadius;
 	RocketMomentum = S.RocketMomentum;
+	RocketSpreadSpacingDegrees = S.RocketSpreadSpacingDegrees;
 	GrenadeDamage = S.GrenadeDamage;
 	GrenadeHurtRadius = S.GrenadeHurtRadius;
 	GrenadeMomentum = S.GrenadeMomentum;
@@ -431,6 +435,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	EnforcerDownTime = S.EnforcerDownTime;
 	EnforcerDamage = S.EnforcerDamage;
 	EnforcerMomentum = S.EnforcerMomentum;
+	EnforcerAllowDouble = S.EnforcerAllowDouble;
 
 	HammerSelectTime = S.HammerSelectTime;
 	HammerDownTime = S.HammerDownTime;
@@ -447,6 +452,38 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	TranslocatorOutSelectTime = S.TranslocatorOutSelectTime;
 	TranslocatorDownTime = S.TranslocatorDownTime;
 	TranslocatorHealth = S.TranslocatorHealth;
+}
+
+final static function CreateWeaponSettings(
+	LevelInfo L,
+	string DefaultName,
+	out WeaponSettings WS,
+	out WeaponSettingsRepl WSR
+) {
+	local Object Helper;
+	local string Options;
+	local int Pos;
+	local string SettingsName;
+	local StringUtils SU;
+
+	Options = L.GetLocalURL();
+	Pos = InStr(Options, "?");
+	if (Pos < 0)
+		Options = "";
+	else
+		Options = Mid(Options, Pos);
+
+	SU = class'StringUtils'.static.Instance();
+
+	SettingsName = L.Game.ParseOption(Options, "IGPlusWeaponSettings");
+	if (SettingsName == "")
+		SettingsName = DefaultName;
+
+	Helper = new(none, 'InstaGibPlus') class'Object';
+	WS = new(Helper, SU.StringToName(SettingsName)) class'WeaponSettings';
+	WS.SaveConfig();
+	WSR = L.Spawn(class'WeaponSettingsRepl');
+	WSR.InitFromWeaponSettings(WS);
 }
 
 defaultproperties
@@ -472,6 +509,7 @@ defaultproperties
 	RocketDamage=75
 	RocketHurtRadius=220
 	RocketMomentum=1.0
+	RocketSpreadSpacingDegrees=3.6
 	GrenadeDamage=80
 	GrenadeHurtRadius=200
 	GrenadeMomentum=1.0
@@ -537,6 +575,7 @@ defaultproperties
 	EnforcerDownTime=0.266667
 	EnforcerDamage=17
 	EnforcerMomentum=1.0
+	EnforcerAllowDouble=True
 
 	HammerSelectTime=0.566667
 	HammerDownTime=0.166667
