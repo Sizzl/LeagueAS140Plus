@@ -718,6 +718,10 @@ function ModifyPlayer(Pawn Other)
 				// we are not undoing the effects because we cant "unplay" a sound
 				// see DeathMatchPlus.PlayTeleportEffect
 			}
+			if (Level.Game.IsA('LeagueAssault'))
+			{
+				zzP.PlayerReplicationInfoClass = Class'bbPlayerReplicationInfoLAS';
+			}
 		}
 	}
 

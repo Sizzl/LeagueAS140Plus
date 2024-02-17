@@ -100,7 +100,7 @@ jobs:
           Replace-PackageName "/Classes/" "*.uc"
 
       - name: Extract Necessary Resources
-        run: 7z x "${{ env.PKG_NAME }}/Build/BuildEnv.zip"
+        run: 7z x "${{ env.PKG_NAME }}/Build/Build*.zip"
 
       - name: Create VersionInfo.uc
         shell: cmd

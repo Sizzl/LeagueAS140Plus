@@ -5,4 +5,4 @@
 :: Example:
 ::   set DEPENDENCIES=MyDependency MyOtherDependency MyThirdDependency
 :: 
-set DEPENDENCIES=
+set DEPENDENCIES=LeagueAS-CP LeagueAS140 LeagueAS-SP
