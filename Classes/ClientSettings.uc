@@ -88,6 +88,13 @@ enum EFraggerScopeChoice {
 };
 var config EFraggerScopeChoice FraggerScopeChoice;
 
+var config bool   bEnableNetStats;
+var config bool   bNetStatsUnconfirmedTime;
+var config bool   bNetStatsLocationError;
+var config float  NetStatsLocationX;
+var config float  NetStatsLocationY;
+var config int    NetStatsWidth;
+
 enum EHitMarkerSource {
 	HMSRC_Server,
 	HMSRC_Client
@@ -367,6 +374,12 @@ simulated function string DumpSettings() {
 		GetSetting("KillFeedSpeed")$
 		GetSetting("KillFeedScale")$
 		GetSetting("FraggerScopeChoice")$
+		GetSetting("bEnableNetStats")$
+		GetSetting("bNetStatsUnconfirmedTime")$
+		GetSetting("bNetStatsLocationError")$
+		GetSetting("NetStatsLocationX")$
+		GetSetting("NetStatsLocationY")$
+		GetSetting("NetStatsWidth")$
 		GetSetting("bEnableHitMarker")$
 		GetSetting("bEnableTeamHitMarker")$
 		GetSetting("HitMarkerColorMode")$
@@ -449,6 +462,12 @@ defaultproperties
 	KillFeedSpeed=1.0
 	KillFeedScale=1.0
 	FraggerScopeChoice=FSC_Moveable
+	bEnableNetStats=False
+	bNetStatsUnconfirmedTime=True
+	bNetStatsLocationError=True
+	NetStatsLocationX=0.5
+	NetStatsLocationY=0.0
+	NetStatsWidth=511
 	bEnableHitMarker=False
 	bEnableTeamHitMarker=False
 	HitMarkerColorMode=HMCM_FriendOrFoe

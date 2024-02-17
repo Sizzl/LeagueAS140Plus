@@ -341,7 +341,9 @@ simulated function PlaySelect() {
 	bCanClientFire = false;
 	if ( !IsAnimating() || (AnimSequence != 'Select') )
 		PlayAnim('Select',GetWeaponSettings().MinigunSelectAnimSpeed(),0.0);
-	Owner.PlaySound(SelectSound, SLOT_Misc, Pawn(Owner).SoundDampening);	
+	Owner.PlaySound(SelectSound, SLOT_Misc, Pawn(Owner).SoundDampening);
+
+	AmbientSound = none;
 }
 
 simulated function TweenDown() {
@@ -355,6 +357,18 @@ simulated function TweenDown() {
 		TweenAnim( AnimSequence, AnimFrame * GetWeaponSettings().MinigunDownTime );
 	else
 		PlayAnim('Down', GetWeaponSettings().MinigunDownAnimSpeed(), TweenTime);
+}
+
+simulated function PlayUnwind()
+{
+	local float TweenTime;
+
+	TweenTime = 0.05;
+	if ( Owner != None )
+	{
+		PlayOwnedSound(Misc1Sound, SLOT_Misc, 3.0*Pawn(Owner).SoundDampening);
+		PlayAnim('UnWind', GetWeaponSettings().MinigunUnwindAnimSpeed(), TweenTime);
+	}
 }
 
 defaultproperties {

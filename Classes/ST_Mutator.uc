@@ -28,6 +28,9 @@ var Pawn Asses[64];			// Team*16, Who assisted in a cap
 var int AssCount[4];			// How many assisted.
 var Pawn NextCTFVictim;			// The Guy that just got killed who had flag
 
+var ST_HitTestHelper CollChecker;
+var ST_HitTestHelper HitTestHelper;
+
 var WeaponSettings WeaponSettings;
 var WeaponSettingsRepl WSettingsRepl;
 
@@ -840,6 +843,10 @@ function PreBeginPlay()
  	Level.Game.RegisterMessageMutator(Self);
 
 	Class'bbCHSpectator'.Default.cStat = Class'ST_PureStatsSpec';
+	HitTestHelper = Spawn(class'ST_HitTestHelper');
+	CollChecker = Spawn(class'ST_HitTestHelper');
+	CollChecker.bCollideWorld = false;
+	CollChecker.SetCollision(true, false, false);
 
 	InitializeSettings();
 
@@ -962,6 +969,123 @@ function bool ReplaceWith(actor Other, string aClassName)
 		return true;
 	}
 	return false;
+}
+
+final function EnhancedHurtRadius(
+	Actor  Source,
+	float  DamageAmount,
+	float  DamageRadius,
+	name   DamageName,
+	float  Momentum,
+	vector HitLocation,
+	optional bool bIsRazor2Alt
+) {
+	local actor Victim;
+	local float damageScale, dist;
+	local float DamageDiffraction;
+	local float MomentumScale;
+	local vector MomentumDelta, MomentumDir;
+	local vector Delta, DeltaXY;
+	local vector Closest;
+	local vector dir;
+
+	local vector SourceGeoLocation, SourceGeoNormal;
+	local vector VictimGeoLocation, VictimGeoNormal;
+
+	if (Source.bHurtEntry)
+		return;
+
+	Source.bHurtEntry = true;
+
+	if (CollChecker == none || CollChecker.bDeleteMe) {
+		CollChecker = Spawn(class'ST_HitTestHelper',self, , Source.Location);
+		CollChecker.bCollideWorld = false;
+	}
+
+	CollChecker.SetCollision(true, false, false);
+	CollChecker.SetCollisionSize(DamageRadius, DamageRadius);
+	CollChecker.SetLocation(HitLocation);
+
+	foreach CollChecker.TouchingActors(class'Actor', Victim) {
+		if (Victim == self)
+			continue;
+
+		Delta = Victim.Location - HitLocation;
+		DeltaXY = Delta * vect(1.0, 1.0, 0.0);
+		dist = VSize(Delta);
+		dir = Normal(Delta);
+
+		if (Abs(Delta.Z) <= Victim.CollisionHeight) {
+			Closest = HitLocation + Normal(DeltaXY) * (VSize(DeltaXY) - Victim.CollisionRadius);
+		} else if (VSize(DeltaXY) <= Victim.CollisionRadius) {
+			if (Delta.Z > 0.0)
+				Closest = HitLocation + FMax(Delta.Z - Victim.CollisionHeight, 0.0) * vect(0.0, 0.0, 1.0);
+			else
+				Closest = HitLocation + FMin(Delta.Z + Victim.CollisionHeight, 0.0) * vect(0.0, 0.0, 1.0);
+		} else {
+			// Closest point must be on the cylinder rims, find out where
+			Closest = Victim.Location + dir * (Source.CollisionRadius / VSize(dir * vect(1.0, 1.0, 0.0)));
+			if (Delta.Z > 0.0)
+				Closest.Z = Victim.Location.Z - Victim.CollisionHeight;
+			else
+				Closest.Z = Victim.Location.Z + Victim.CollisionHeight;
+		}
+
+		Delta = Closest - HitLocation;
+		if (VSize(Delta) > CollChecker.CollisionRadius)
+			continue;
+
+		dist = VSize(Delta);
+		dir = Normal(Delta);
+
+		if (FastTrace(Victim.Location, Source.Location) == false) {
+			if (Victim.IsA('Pawn') == false)
+				continue;
+
+			// give Pawns a second chance to be hit
+			if (HitTestHelper == none || HitTestHelper.bDeleteMe)
+				HitTestHelper = Spawn(class'ST_HitTestHelper', self, , Source.Location);
+			else
+				HitTestHelper.SetLocation(Source.Location);
+
+			HitTestHelper.FlyTowards(Victim.Location, DamageRadius);
+			if (FastTrace(Victim.Location, HitTestHelper.Location) == false)
+				continue;
+
+			Trace(SourceGeoLocation, SourceGeoNormal, Closest, HitLocation, false);
+			Trace(VictimGeoLocation, VictimGeoNormal, HitLocation, Closest, false);
+
+			DamageDiffraction =
+				FClamp(WeaponSettings.SplashMaxDiffraction, 0.0, 1.0) *
+				FClamp((VSize(VictimGeoLocation - SourceGeoLocation) - WeaponSettings.SplashMinDiffractionDistance) / dist, 0.0, 1.0);
+		}
+
+		MomentumDelta = Victim.Location - HitLocation;
+		MomentumDir = Normal(MomentumDelta);
+
+		if (bIsRazor2Alt)
+			MomentumDir.Z = FMin(0.45, MomentumDir.Z);
+
+		damageScale = FMin(1.0 - dist/DamageRadius, 1.0); // apply upper bound to damage
+		damageScale *= (1.0 - DamageDiffraction);
+		MomentumScale = FClamp(1.0 - (VSize(MomentumDelta) - Victim.CollisionRadius)/DamageRadius, 0.0, 1.0);
+		MomentumScale *= (1.0 - DamageDiffraction);
+
+		if (damageScale <= 0.0)
+			continue;
+
+		Victim.TakeDamage(
+			damageScale * DamageAmount,
+			Source.Instigator,
+			Victim.Location - 0.5 * (Victim.CollisionRadius + Victim.CollisionHeight) * dir,
+			(MomentumScale * Momentum * MomentumDir),
+			DamageName
+		);
+	}
+
+	CollChecker.SetCollision(false, false, false);
+
+	Source.bHurtEntry = false;
 }
 
 defaultproperties {

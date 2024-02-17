@@ -26,6 +26,10 @@ var float FlakPostSelectTime;
 var float FlakDownTime;
 var float FlakChunkDamage;
 var float FlakChunkMomentum;
+var float FlakChunkLifespan;
+var float FlakChunkDropOffStart;
+var float FlakChunkDropOffEnd;
+var float FlakChunkDropOffDamageRatio;
 var float FlakSlugDamage;
 var float FlakSlugHurtRadius;
 var float FlakSlugMomentum;
@@ -43,6 +47,7 @@ var float RipperSecondaryMomentum;
 var float MinigunSelectTime;
 var float MinigunDownTime;
 var float MinigunSpinUpTime;
+var float MinigunUnwindTime;
 var float MinigunBulletInterval;
 var float MinigunAlternateBulletInterval;
 var float MinigunMinDamage;
@@ -137,6 +142,10 @@ replication {
 		FlakDownTime,
 		FlakChunkDamage,
 		FlakChunkMomentum,
+		FlakChunkLifespan,
+		FlakChunkDropOffStart,
+		FlakChunkDropOffEnd,
+		FlakChunkDropOffDamageRatio,
 		FlakSlugDamage,
 		FlakSlugHurtRadius,
 		FlakSlugMomentum,
@@ -154,6 +163,7 @@ replication {
 		MinigunSelectTime,
 		MinigunDownTime,
 		MinigunSpinUpTime,
+		MinigunUnwindTime,
 		MinigunBulletInterval,
 		MinigunAlternateBulletInterval,
 		MinigunMinDamage,
@@ -306,6 +316,12 @@ simulated final function float MinigunDownAnimSpeed() {
 	return 100.0;
 }
 
+simulated final function float MinigunUnwindAnimSpeed() {
+	if (MinigunUnwindTime > 0.0)
+		return FMin(100.0, 1.5 * default.MinigunUnwindTime / MinigunUnwindTime);
+	return 100.0;
+}
+
 simulated final function float PulseSelectAnimSpeed() {
 	if (PulseSelectTime > 0.0)
 		return FMin(100.0, default.PulseSelectTime / PulseSelectTime);
@@ -435,6 +451,10 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	FlakDownTime = S.FlakDownTime;
 	FlakChunkDamage = S.FlakChunkDamage;
 	FlakChunkMomentum = S.FlakChunkMomentum;
+	FlakChunkLifespan = S.FlakChunkLifespan;
+	FlakChunkDropOffStart = S.FlakChunkDropOffStart;
+	FlakChunkDropOffEnd = S.FlakChunkDropOffEnd;
+	FlakChunkDropOffDamageRatio = S.FlakChunkDropOffDamageRatio;
 	FlakSlugDamage = S.FlakSlugDamage;
 	FlakSlugHurtRadius = S.FlakSlugHurtRadius;
 	FlakSlugMomentum = S.FlakSlugMomentum;
@@ -452,6 +472,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	MinigunSelectTime = S.MinigunSelectTime;
 	MinigunDownTime = S.MinigunDownTime;
 	MinigunSpinUpTime = S.MinigunSpinUpTime;
+	MinigunUnwindTime = S.MinigunUnwindTime;
 	MinigunBulletInterval = S.MinigunBulletInterval;
 	MinigunAlternateBulletInterval = S.MinigunAlternateBulletInterval;
 	MinigunMinDamage = S.MinigunMinDamage;
@@ -585,6 +606,10 @@ defaultproperties
 	FlakDownTime=0.333333
 	FlakChunkDamage=16
 	FlakChunkMomentum=1.0
+	FlakChunkLifespan=2.9
+	FlakChunkDropOffStart=0.0
+	FlakChunkDropOffEnd=0.0
+	FlakChunkDropOffDamageRatio=1.0
 	FlakSlugDamage=70
 	FlakSlugHurtRadius=150
 	FlakSlugMomentum=1.0
@@ -602,6 +627,7 @@ defaultproperties
 	MinigunSelectTime=0.555556
 	MinigunDownTime=0.333333
 	MinigunSpinUpTime=0.130
+	MinigunUnwindTime=0.866666
 	MinigunBulletInterval=0.080
 	MinigunAlternateBulletInterval=0.050
 	MinigunMinDamage=5

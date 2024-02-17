@@ -210,8 +210,11 @@ function PostBeginPlay()
 		MLH.Accepted();
 
 	//Log("bAutoPause:"@bAutoPause@"bTeamGame:"@zzDMP.bTeamGame@"bTournament:"@zzDMP.bTournament);
-	if (Settings.bAutoPause && zzDMP.bTeamGame && zzDMP.bTournament)
+	if (Settings.bAutoPause && zzDMP.bTeamGame && zzDMP.bTournament) {
 		zzAutoPauser = Spawn(Class'PureAutoPause');
+		zzAutoPauser.Settings = Settings;
+		zzAutoPauser.Initialize();
+	}
 
 	if (Settings.bUseClickboard)
 		SetupClickBoard();
@@ -224,6 +227,7 @@ function PostBeginPlay()
 
 	Spawn(class'NN_SpawnNotify');
 	Spawn(class'IGPlus_UnlagPause');
+	Spawn(class'IGPlus_CarcassSpawnNotify').bEnableCarcassCollision = Settings.bEnableCarcassCollision;
 
 	if (Settings.NNAnnouncer)
 		Spawn(class'NNAnnouncerSA');
@@ -708,7 +712,7 @@ function ModifyPlayer(Pawn Other)
 				zzP.zzbForceDemo = Settings.bForceDemo;
 				zzP.zzbGameStarted = True;
 			}
-			if (Settings.bEnablePingCompensatedSpawn) {
+			if (zzP.RemoteRole == ROLE_AutonomousProxy && Settings.bEnablePingCompensatedSpawn) {
 				zzP.bHidden = true;
 				zzP.SetCollision(false, false, false);
 				// we are not undoing the effects because we cant "unplay" a sound

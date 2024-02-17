@@ -32,6 +32,9 @@ var config bool bWarmup;		// Enable or disable warmup. (bTournament only)
 var config int WarmupTimeLimit; // Warmup lasts at most this long
 var config bool bCoaches;		// Enable or disable coaching. (bTournament only)
 var config bool bAutoPause;		// Enable or disable autopause. (bTournament only)
+var config int PauseTotalTime;	// Total amount of Seconds a team may pause a game.
+var config int PauseTime;		// Amount of seconds a team may pause pr pause/timeout.
+var config int Timeouts;		// Max amount of times a team may take timeouts. (for Coaches)
 var config byte ForceModels;		// 0 = Disallow, 1 = Client Selectable, 2 = Forced
 var config byte ImprovedHUD;		// 0 = Disabled, 1 = Boots/Clock, 2 = Enhanced Team Info
 var config bool bDelayedPickupSpawn;	// Enable or disable delayed first pickup spawn.
@@ -65,6 +68,7 @@ var config float MaxJitterTime;
 var config float WarpFixDelay;
 var config float MinNetUpdateRate;
 var config float MaxNetUpdateRate;
+var config bool  bEnableInputReplication;
 var config bool  bEnableServerExtrapolation;
 var config bool  bEnableServerPacketReordering;
 var config bool  bEnableLoosePositionCheck;
@@ -72,6 +76,7 @@ var config bool  bPlayersAlwaysRelevant;
 var config bool  bEnablePingCompensatedSpawn;
 var config bool  bEnableJitterBounding;
 var config bool  bEnableWarpFix;
+var config bool  bEnableCarcassCollision;
 var config bool  ShowTouchedPackage;
 
 //Add the maplist where kickers will work using normal network
@@ -90,6 +95,9 @@ function DumpSetting(PlayerPawn P, string S) {
 
 function DumpServerSettings(PlayerPawn P) {
 	P.ClientMessage("SettingsObject="$self);
+	DumpSetting(P, "bAutoPause");
+	DumpSetting(P, "PauseTotalTime");
+	DumpSetting(P, "PauseTime");
 	DumpSetting(P, "bForceDemo");
 	DumpSetting(P, "bRestrictTrading");
 	DumpSetting(P, "MaxTradeTimeMargin");
@@ -113,6 +121,7 @@ function DumpServerSettings(PlayerPawn P) {
 	DumpSetting(P, "WarpFixDelay");
 	DumpSetting(P, "MinNetUpdateRate");
 	DumpSetting(P, "MaxNetUpdateRate");
+	DumpSetting(P, "bEnableInputReplication");
 	DumpSetting(P, "bEnableServerExtrapolation");
 	DumpSetting(P, "bEnableServerPacketReordering");
 	DumpSetting(P, "bEnableLoosePositionCheck");
@@ -135,6 +144,8 @@ defaultproperties
 	bAllowBehindView=False
 	TrackFOV=0
 	bAutoPause=True
+	PauseTotalTime=300
+    PauseTime=60
 	bFastTeams=True
 	bUseClickboard=True
 	MinClientRate=10000
@@ -172,13 +183,15 @@ defaultproperties
 	MaxMultiDodges=1
 	BrightskinMode=1
 	PlayerScale=1.0
+	bEnableInputReplication=False
 	bAlwaysRenderFlagCarrier=False
 	bAlwaysRenderDroppedFlags=False
-	bEnableServerExtrapolation=True
+	bEnableServerExtrapolation=False
 	bEnableServerPacketReordering=False
-	bEnableLoosePositionCheck=True
+	bEnableLoosePositionCheck=False
 	bPlayersAlwaysRelevant=True
 	bEnablePingCompensatedSpawn=True
-	bEnableJitterBounding=True
+	bEnableJitterBounding=False
 	bEnableWarpFix=True
+	bEnableCarcassCollision=True
 }

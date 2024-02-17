@@ -49,6 +49,7 @@ var bool	zzbGotDemoPlaybackSpec;
 var CHSpectator zzDemoPlaybackSpec;
 var bbClientDemoSN zzDemoPlaybackSN;
 var bool bDemoStarted;
+var float IGPlus_GameEndedTime;
 
 // Stuff
 var float	zzDesiredFOV;		// Needed ?
@@ -80,7 +81,6 @@ var int zzPositionIndex;
 var float zzNextPositionTime;
 var bool zzbNN_Tracing;
 var Weapon zzPendingWeapon;
-var bool bJustRespawned;
 var float LastCAPTime; // ServerTime when last CAP was sent
 var float NextRealCAPTime;
 var decoration carriedFlag;
@@ -314,8 +314,11 @@ var float IGPlus_WarpFixDelay;
 var IGPlus_WarpFix IGPlus_WarpFixData;
 var IGPlus_WarpFixClient IGPlus_WarpFixClientData;
 
+const IGPlus_LocationOffsetFix_DummyVel = vect(4.56,4.56,0.0);
+
 var bool IGPlus_LocationOffsetFix_Moved;
 var bool IGPlus_LocationOffsetFix_Restored;
+var bool IGPlus_LocationOffsetFix_PredCompatMode;
 var vector IGPlus_LocationOffsetFix_OldLocation;
 var vector IGPlus_LocationOffsetFix_ExtrapolationOffset;
 var vector IGPlus_LocationOffsetFix_PredictionOffset;
@@ -342,6 +345,22 @@ var IGPlus_FlagSprite IGPlus_TeamFlagSprite[4];
 var bool IGPlus_EnableDualButtonSwitch;
 var bool IGPlus_UseFastWeaponSwitch;
 
+
+var bool IGPlus_EnableInputReplication;
+var bool IGPlus_PressedJumpSave;
+var IGPlus_SavedInputChain IGPlus_SavedInputChain;
+var IGPlus_DataBuffer IGPlus_InputReplicationBuffer;
+var float IGPlus_LastInputSendTime;
+var float MinDodgeClickTime;
+var IGPlus_InputLogFile IGPlus_InputLogFile;
+var bool bTraceInput;
+
+var IGPlus_NetStats NetStatsElem;
+
+struct ReplBuffer {
+	var int Data[20];
+};
+
 replication
 {
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -358,6 +377,7 @@ replication
 		HUDInfo,
 		IGPlus_AlwaysRenderDroppedFlags,
 		IGPlus_AlwaysRenderFlagCarrier,
+		IGPlus_EnableInputReplication,
 		IGPlus_EnableWarpFix,
 		IGPlus_WarpFixDelay,
 		IGPlus_UseFastWeaponSwitch,
@@ -422,7 +442,6 @@ replication
 		xxClientSwJumpPad,
 		xxSetDefaultWeapon,
 		xxSetPendingWeapon,
-		xxSetSniperSpeed,
 		xxSetTeleRadius,
 		xxSetTimes;
 
@@ -460,6 +479,7 @@ replication
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Functions Client -> Server
 	unreliable if ( Role < ROLE_Authority )
+		ServerApplyInput,
 		xxServerCheater,
 		xxServerMove,
 		xxServerMoveDead;
@@ -472,6 +492,7 @@ replication
 		IGPlus_ForcedSettingsOK,
 		IGPlus_ForcedSettings_InitOK,
 		PrintWeaponState,
+		ServerSetDodgeSettings,
 		ShowStats,
 		xxExplodeOther,
 		xxNN_AltFire,
@@ -487,7 +508,6 @@ replication
 		xxServerReceiveKeys,
 		xxServerReceiveMenuItems,
 		xxServerSetForceModels,
-		xxServerSetMinDodgeClickTime,
 		xxServerSetReadyToPlay,
 		xxServerSetTeamInfo,
 		xxSetNetUpdateRate;
@@ -637,6 +657,9 @@ simulated event Destroyed() {
 	if (Role == ROLE_SimulatedProxy && IGPlus_LocationOffsetFix_CollisionDummy != none) {
 		IGPlus_LocationOffsetFix_DestroyCollisionDummy();
 	}
+
+	if (bTraceInput && IGPlus_InputLogFile != none)
+		IGPlus_InputLogFile.StopLog();
 	super.Destroyed();
 }
 
@@ -926,6 +949,8 @@ event PostBeginPlay()
 	Utils = new(none) class'Utilities';
 	StringUtils = class'StringUtils'.static.Instance();
 	PlayerStatics = Spawn(class'bbPlayerStatics');
+	IGPlus_SavedInputChain = Spawn(class'IGPlus_SavedInputChain');
+	IGPlus_InputReplicationBuffer = new class'IGPlus_DataBuffer';
 
 	InitSettings();
 
@@ -958,6 +983,8 @@ simulated event PostNetBeginPlay()
 	Utils = new(none) class'Utilities';
 	StringUtils = class'StringUtils'.static.Instance();
 	PlayerStatics = Spawn(class'bbPlayerStatics');
+	IGPlus_SavedInputChain = Spawn(class'IGPlus_SavedInputChain');
+	IGPlus_InputReplicationBuffer = new class'IGPlus_DataBuffer';
 
 	InitSettings();
 
@@ -1000,6 +1027,11 @@ static function SetMultiSkin(Actor SkinActor, string SkinName, string FaceName, 
 	super.SetMultiSkin(SkinActor, SkinName, FaceName, TeamNum);
 }
 
+function ServerSetDodgeSettings(float MaxTime, float MinTime) {
+	DodgeClickTime = MaxTime;
+	MinDodgeClickTime = MinTime;
+}
+
 event Possess()
 {
 	local Kicker K;
@@ -1017,7 +1049,7 @@ event Possess()
 		SetNetUpdateRate(Settings.DesiredNetUpdateRate);
 		xxServerSetForceModels(Settings.bForceModels);
 		xxServerSetTeamInfo(Settings.bTeamInfo);
-		xxServerSetMinDodgeClickTime(Settings.MinDodgeClickTime);
+		ServerSetDodgeSettings(DodgeClickTime, Settings.MinDodgeClickTime);
 		if (class'UTPlayerClientWindow'.default.PlayerSetupClass != class'UTPureSetupScrollClient')
 			class'UTPlayerClientWindow'.default.PlayerSetupClass = class'UTPureSetupScrollClient';
 		// This blocks silly set commands by kicking player, after resetting them.
@@ -1066,7 +1098,6 @@ event Possess()
 
 		BrightskinMode = zzUTPure.Settings.BrightskinMode;
 
-		xxSetSniperSpeed(zzUTPure.Settings.SniperSpeed);
 		xxSetDefaultWeapon(Level.Game.BaseMutator.MutatedDefaultWeapon().name);
 
 		GameReplicationInfo.RemainingTime = DeathMatchPlus(Level.Game).RemainingTime;
@@ -1087,6 +1118,7 @@ event Possess()
 		IGPlus_AlwaysRenderFlagCarrier = zzUTPure.Settings.bAlwaysRenderFlagCarrier;
 		IGPlus_AlwaysRenderDroppedFlags = zzUTPure.Settings.bAlwaysRenderDroppedFlags;
 		IGPlus_UseFastWeaponSwitch = zzUTPure.Settings.bUseFastWeaponSwitch;
+		IGPlus_EnableInputReplication = zzUTPure.Settings.bEnableInputReplication;
 
 		if(!zzUTPure.bExludeKickers)
 		{
@@ -1123,6 +1155,17 @@ event Possess()
 	if (Role == ROLE_AutonomousProxy || (Role == ROLE_Authority && RemoteRole != ROLE_AutonomousProxy)) {
 		IGPlus_EnableDualButtonSwitch = IGPlus_DetermineDualButtonSwitchSetting();
 	}
+
+	IGPlus_InputLogFile = Spawn(class'IGPlus_InputLogFile');
+	if (Level.NetMode == NM_Client)
+		IGPlus_InputLogFile.LogId = "ClientInput";
+	else
+		IGPlus_InputLogFile.LogId = "ServerInput"$"_"$PlayerReplicationInfo.PlayerId;
+	if (bTraceInput)
+		IGPlus_InputLogFile.StartLog();
+
+	if (Level.NetMode != NM_DedicatedServer)
+		NetStatsElem = Spawn(class'IGPlus_NetStats');
 
 	Super.Possess();
 }
@@ -1314,6 +1357,10 @@ function IGPlus_NotifyPlayerRestart(vector Loc, rotator Dir, bbPlayer Other) {
 	PTE.Initialize(Other, true);
 	PTE.PlaySound(sound'Resp2A',, 10.0);
 	PTE.RemoteRole = ROLE_None;
+
+	// dont show light if you cant see the effect
+	if (FastTrace(PTE.Location) == false)
+		PTE.LightType = LT_None;
 }
 
 function IGPlus_SendRespawnNoficiation() {
@@ -1559,10 +1606,11 @@ function xxCheckFOV()
 
 event PlayerInput( float DeltaTime )
 {
-	local float Now, SmoothTime, FOVScale, MouseScale, AbsSmoothX, AbsSmoothY, MouseTime;
+	local float SmoothTime, FOVScale, MouseScale, AbsSmoothX, AbsSmoothY, MouseTime;
 	local bool bOldWasForward, bOldWasBack, bOldWasLeft, bOldWasRight;
 
-	Now = Level.TimeSeconds;
+	if ( bUpdatePosition && IGPlus_EnableInputReplication )
+		ClientUpdatePositionWithInput();
 
 	// Check for Dodge move
 	// flag transitions
@@ -1581,6 +1629,7 @@ event PlayerInput( float DeltaTime )
 	if (Settings.bDebugMovement && (bEdgeForward || bEdgeBack || bEdgeLeft || bEdgeRight))
 		ClientDebugMessage("BaseY:"@aBaseY@"Strafe:"@aStrafe@bWasForward@bWasBack@bWasLeft@bWasRight);
 
+	IGPlus_PressedJumpSave = bPressedJump;
 	bPressedDodge = (bDodge != bOldDodge) && (bDodge > 0);
 	bOldDodge = bDodge;
 
@@ -1824,15 +1873,28 @@ simulated function xxPureCAP(float TimeStamp, name newState, int MiscData, vecto
 	local Decoration Carried;
 	local vector OldLoc;
 
-	if ( CurrentTimeStamp > TimeStamp )
+	if (bDeleteMe)
 		return;
+
+	if (IGPlus_EnableInputReplication) {
+		if (IGPlus_SavedInputChain.Oldest.TimeStamp - 0.5*IGPlus_SavedInputChain.Oldest.Delta > TimeStamp) {
+			ClientDebugMessage("Ignore CAP"@TimeStamp@IGPlus_SavedInputChain.Oldest.TimeStamp);
+			return;
+		}
+
+		if (bTraceInput && IGPlus_InputLogFile != none)
+			IGPlus_InputLogFile.LogCAP(TimeStamp, NewLoc, NewVel, NewBase);
+	} else {
+		if ( CurrentTimeStamp > TimeStamp )
+			return;
+	}
 	CurrentTimeStamp = TimeStamp;
 
 	// Higor: keep track of Position prior to adjustment
 	// and stop current smoothed adjustment (if in progress).
 	if (bUpdatePosition == false)
 		IGPlus_PreAdjustLocation = Location;
-	if ( IGPlus_AdjustLocationAlpha > 0 )
+	if ( VSize(IGPlus_AdjustLocationOffset) > 0 )
 	{
 		IGPlus_AdjustLocationAlpha = 0;
 		IGPlus_AdjustLocationOffset = vect(0,0,0);
@@ -1997,6 +2059,8 @@ function ClientUpdatePosition()
 			MoveSmooth(-IGPlus_AdjustLocationOffset);
 			IGPlus_AdjustLocationAlpha = FMax(0.1, PlayerReplicationInfo.Ping*0.001);
 			IGPlus_AdjustLocationOffset = (PostAdjustLocation - Location) / IGPlus_AdjustLocationAlpha;
+		} else {
+			NetStatsElem.bInstantRelocation = true;
 		}
 	}
 
@@ -2008,6 +2072,65 @@ function ClientUpdatePosition()
 	ViewRotation = RealViewRotation;
 	DodgeDir = RealDodgeDir;
 	DodgeClickTimer = RealDodgeClickTimer;
+	zzbFakeUpdate = true;
+
+	UpdatePing();
+}
+
+function ClientUpdatePositionWithInput() {
+	local IGPlus_SavedInput In;
+	local bool bRealJump;
+	local float AdjustDistance;
+	local vector PostAdjustLocation;
+	local rotator SavedViewRotation;
+
+	bUpdatePosition = false;
+	bRealJump = bPressedJump;
+	bUpdating = true;
+
+	IGPlus_SavedInputChain.RemoveOutdatedNodes(CurrentTimeStamp);
+	if (zzbFakeUpdate == false) {
+		SavedViewRotation = ViewRotation;
+
+		In = IGPlus_SavedInputChain.Oldest;
+		if (In != none) {
+			debugClientLocError = VSize(In.SavedLocation - Location);
+			clientForcedPosition = In.SavedVelocity - Velocity;
+			while(In.Next != none) {
+				PlayBackInput(In, In.Next);
+				if (bTraceInput && IGPlus_InputLogFile != none)
+					IGPlus_InputLogFile.LogInputReplay(In.Next);
+				In = In.Next;
+			}
+		}
+
+		ViewRotation = SavedViewRotation;
+
+		// Higor: evaluate location adjustment and see if we should either
+		// - Discard it
+		// - Negate and process over a certain amount of time.
+		// - Keep adjustment as is (instant relocation)
+		// Deaod: Use exponential decay on offset instead
+		IGPlus_AdjustLocationOffset = (Location - IGPlus_PreAdjustLocation);
+		AdjustDistance = VSize(IGPlus_AdjustLocationOffset);
+		if ((AdjustDistance < 50) &&
+			FastTrace(Location,IGPlus_PreAdjustLocation) &&
+			IGPlus_AdjustLocationOverride == false
+		) {
+			// Undo adjustment and re-enact smoothly
+			PostAdjustLocation = Location;
+			MoveSmooth(-IGPlus_AdjustLocationOffset);
+			if (AdjustDistance > 2) {
+				IGPlus_AdjustLocationOffset = (PostAdjustLocation - Location);
+			}
+		} else {
+			NetStatsElem.bInstantRelocation = true;
+			IGPlus_AdjustLocationOffset = vect(0,0,0);
+		}
+	}
+
+	bUpdating = false;
+	bPressedJump = bRealJump;
 	zzbFakeUpdate = true;
 
 	UpdatePing();
@@ -2218,7 +2341,9 @@ function ClearLastServerMoveParams() {
 function IGPlus_ProcessRemoteMovement() {
 	IGPlus_ApplyAllServerMoves();
 
-	if (zzUTPure.Settings.bEnableLoosePositionCheck)
+	if (IGPlus_EnableInputReplication)
+		IGPlus_AcknowledgeInput();
+	else if (zzUTPure.Settings.bEnableLoosePositionCheck)
 		IGPlus_LooseCheckClientError();
 	else
 		IGPlus_CheckClientError();
@@ -2337,7 +2462,6 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 	}
 
 	zzKickReady = Max(zzKickReady - 1,0);
-	bJustRespawned = false;
 
 	if (CurrentTimeStamp >= SM.TimeStamp) {
 		ClientDebugMessage("Reject Outdated Move:"@CurrentTimeStamp@SM.TimeStamp);
@@ -2405,7 +2529,7 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 			else
 				MaxTimeMargin = 0.5;
 			DeltaTime = 0;
-			Log("["$Level.TimeSeconds$"]"@PlayerReplicationInfo.PlayerName@"MaxTimeMargin exceeded ("$TimeMargin$")", 'IGPlus');
+			ClientDebugMessage("["$Level.TimeSeconds$"]"@PlayerReplicationInfo.PlayerName@"MaxTimeMargin exceeded ("$TimeMargin$")", 'IGPlus');
 		}
 	}
 
@@ -2428,7 +2552,7 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 	if ((Level.Pauser == "") && (DeltaTime > 0)) {
 		UndoExtrapolation();
 
-		if (zzUTPure.Settings.bEnablePingCompensatedSpawn) {
+		if (RemoteRole == ROLE_AutonomousProxy && zzUTPure.Settings.bEnablePingCompensatedSpawn) {
 			if (bHidden && (IsInState('PlayerWalking') || IsInState('PlayerSwimming'))) {
 				bClientDead = false;
 				bHidden = false;
@@ -2758,7 +2882,7 @@ function IGPlus_SendCAP() {
 
 	LastCAPTime = ServerTimeStamp;
 	NextRealCAPTime = ServerTimeStamp;
-	if (zzUTPure.Settings.bEnableLoosePositionCheck)
+	if (zzUTPure.Settings.bEnableLoosePositionCheck && IGPlus_EnableInputReplication == false)
 		NextRealCAPTime += PlayerReplicationInfo.Ping * 0.001 * Level.TimeDilation + AverageServerDeltaTime;
 	zzLastClientErr = 0;
 	IGPlus_WantCAP = false;
@@ -2967,7 +3091,7 @@ function xxServerMove(
 	SM = IGPlus_CreateServerMove();
 
 	SM.TimeStamp = TimeStamp;
-	SM.MoveDeltaTime = MoveDeltaTime * 0.0000152587890625;
+	SM.MoveDeltaTime = (MoveDeltaTime >>> 8) * 0.0000152587890625;
 	SM.ClientAcceleration = Accel * 0.1;
 	SM.ClientLocation.X = ClientLocX;
 	SM.ClientLocation.Y = ClientLocY;
@@ -3036,7 +3160,7 @@ function xxServerMoveDead(
 			else
 				MaxTimeMargin = 0.5;
 			DeltaTime = 0;
-			Log("["$Level.TimeSeconds$"]"@PlayerReplicationInfo.PlayerName@"MaxTimeMargin exceeded ("$TimeMargin$")", 'IGPlus');
+			ClientDebugMessage("["$Level.TimeSeconds$"]"@PlayerReplicationInfo.PlayerName@"MaxTimeMargin exceeded ("$TimeMargin$")", 'IGPlus');
 		}
 	}
 
@@ -3059,6 +3183,106 @@ function xxServerMoveDead(
 	if (IsInState('Dying')) {
 		ViewRotation.Yaw = View & 0xFFFF;
 		ViewRotation.Pitch = View >>> 16;
+	}
+}
+
+function ServerApplyInput(float RefTimeStamp, int NumBits, ReplBuffer B) {
+	local int i;
+	local IGPlus_SavedInput Node;
+	local IGPlus_SavedInput Old;
+	local float DeltaTime;
+	local float ServerDeltaTime;
+	local float LostTime;
+
+	if (Role < ROLE_Authority) {
+		zzbLogoDone = True;
+		zzTrackFOV = 0;
+		zzbDemoPlayback = True;
+		return;
+	}
+
+	if (bDeleteMe) {
+		ClientDebugMessage("Reject Irrelevant Move");
+		return;
+	}
+
+	zzKickReady = Max(zzKickReady - 1,0);
+
+	IGPlus_InputReplicationBuffer.NumBitsConsumed = 0;
+	IGPlus_InputReplicationBuffer.NumBits = NumBits;
+	for (i = 0; i < arraycount(B.Data); i++)
+		IGPlus_InputReplicationBuffer.BitsData[i] = B.Data[i];
+
+	debugServerMoveCallsReceived += 1;
+
+	if (Level.Pauser == "")
+		UndoExtrapolation();
+
+	Old = IGPlus_SavedInputChain.Newest;
+	if (Old == none) {
+		Old = IGPlus_SavedInputChain.AllocateNode();
+		Old.DeserializeFrom(IGPlus_InputReplicationBuffer);
+		Old.TimeStamp = RefTimeStamp + Old.Delta;
+		RefTimeStamp = Old.TimeStamp;
+		if (IGPlus_SavedInputChain.AppendNode(Old) == false)
+			IGPlus_SavedInputChain.FreeNode(Old);
+	}
+
+	while(IGPlus_InputReplicationBuffer.IsDataSufficient(class'IGPlus_SavedInput'.default.SerializedBits)) {
+		Node = IGPlus_SavedInputChain.AllocateNode();
+		Node.DeserializeFrom(IGPlus_InputReplicationBuffer);
+		DeltaTime += Node.Delta;
+		Node.TimeStamp = RefTimeStamp + DeltaTime;
+		if (IGPlus_SavedInputChain.AppendNode(Node) == false)
+			IGPlus_SavedInputChain.FreeNode(Node);
+	}
+
+	DeltaTime        = IGPlus_SavedInputChain.Newest.TimeStamp - CurrentTimeStamp;
+	CurrentTimeStamp = IGPlus_SavedInputChain.Newest.TimeStamp;
+
+	if (ServerTimeStamp != 0.0) {
+		ServerDeltaTime = Level.TimeSeconds - ServerTimeStamp;
+		ServerTimeStamp = Level.TimeSeconds;
+
+		ExtrapolationDelta += (ServerDeltaTime - DeltaTime);
+	} else {
+		ServerTimeStamp = Level.TimeSeconds;
+		ExtrapolationDelta = 0.0;
+	}
+
+	if (zzUTPure.Settings.bEnableJitterBounding) {
+		LostTime = -Old.TimeStamp;
+		IGPlus_SavedInputChain.RemoveOutdatedNodes(CurrentTimeStamp + ExtrapolationDelta - zzUTPure.Settings.MaxJitterTime);
+		Old = IGPlus_SavedInputChain.Oldest;
+		LostTime += Old.TimeStamp;
+
+		if (LostTime > 0.001)
+			ClientDebugMessage("SAI LostTime"@Old.TimeStamp@CurrentTimeStamp@ExtrapolationDelta);
+	}
+
+	if (IGPlus_UseFastWeaponSwitch && PendingWeapon != None)
+		ChangedWeapon();
+
+	// play back input
+	while(Old.Next != none) {
+		PlayBackInput(Old, Old.Next);
+		if (bTraceInput && IGPlus_InputLogFile != none)
+			IGPlus_InputLogFile.LogInput(Old.Next);
+		Old = Old.Next;
+	}
+
+	// clean up
+	IGPlus_SavedInputChain.RemoveOutdatedNodes(Old.TimeStamp);
+
+	IGPlus_WarpFixUpdate = true;
+}
+
+function IGPlus_AcknowledgeInput() {
+	if (IsInState('Dying') == false && IGPlus_SavedInputChain.Newest.bLive) {
+		// always request CAP while alive
+		// when dead you dont want players to still be receiving CAPs,
+		// that screws up respawning
+		IGPlus_SendCAP();
 	}
 }
 
@@ -3282,11 +3506,6 @@ simulated function xxDisableCarcasses()
 
 exec function Fire( optional float F )
 {
-	if (TournamentWeapon(Weapon) != none && TournamentWeapon(Weapon).FireAdjust != 1.0) {
-		xxServerCheater("FA");
-		TournamentWeapon(Weapon).FireAdjust = 1.0;
-	}
-
 	xxEnableCarcasses();
 	if (Weapon != none) {
 		if (Level.NetMode == NM_Client)
@@ -3577,11 +3796,6 @@ simulated function xxSetDefaultWeapon(name W)
 	zzDefaultWeapon = W;
 }
 
-simulated function xxSetSniperSpeed(float SniperSpeed)
-{
-	zzUTPure.Settings.SniperSpeed = SniperSpeed;
-}
-
 simulated function xxSetTimes(int RemainingTime, int ElapsedTime)
 {
 	if (GameReplicationInfo == None)
@@ -3590,6 +3804,141 @@ simulated function xxSetTimes(int RemainingTime, int ElapsedTime)
 	GameReplicationInfo.ElapsedTime = ElapsedTime;
 }
 
+function PlayerMove(float Delta) {
+	ClientMessage("Help Im Stuck In Global Function");
+}
+
+function PlayBackInput(IGPlus_SavedInput Old, IGPlus_SavedInput I) {
+	local float OldBaseX, OldBaseY, OldBaseZ;
+	local float OldMouseX, OldMouseY;
+	local float OldForward, OldStrafe, OldUp, OldLookUp, OldTurn;
+	local byte OldRun, OldDuck;
+
+	OldBaseX = aBaseX;
+	OldBaseY = aBaseY;
+	OldBaseZ = aBaseZ;
+	OldMouseX = aMouseX;
+	OldMouseY = aMouseY;
+	OldForward = aForward;
+	OldStrafe = aStrafe;
+	OldUp = aUp;
+	OldLookUp = aLookUp;
+	OldTurn = aTurn;
+	OldRun = bRun;
+	OldDuck = bDuck;
+
+	aBaseX = 0;
+	aBaseY = 0;
+	aBaseZ = 0;
+	aMouseX = 0;
+	aMouseY = 0;
+	aForward = 0;
+	aStrafe = 0;
+	aUp = 0;
+	aLookUp = 0;
+	aTurn = 0;
+
+	// the following prevents clients from erroneously indicating that they are
+	// dead locally and still sending input activity.
+	I.bLive = I.bLive ||
+		I.bForw ||
+		I.bBack ||
+		I.bLeft ||
+		I.bRigh ||
+		I.bWalk ||
+		I.bDuck ||
+		I.bJump ||
+		I.bDodg ||
+		I.bFire ||
+		I.bAFir;
+
+	bWasForward    = I.bForw;
+	bWasBack       = I.bBack;
+	bWasLeft       = I.bLeft;
+	bWasRight      = I.bRigh;
+	bEdgeForward   = Old.bForw != bWasForward;
+	bEdgeBack      = Old.bBack != bWasBack;
+	bEdgeLeft      = Old.bLeft != bWasLeft;
+	bEdgeRight     = Old.bRigh != bWasRight;
+
+	if (I.bForw) aForward += 6000.0;
+	if (I.bBack) aForward -= 6000.0;
+	if (I.bLeft) aStrafe  += 6000.0;
+	if (I.bRigh) aStrafe  -= 6000.0;
+	if (I.bDuck) aUp      -= 6000.0;
+	if (I.bJump) aUp      += 6000.0;
+
+	if (I.bWalk) bRun = 1; else bRun = 0;
+	if (I.bDuck) bDuck = 1; else bDuck = 0;
+	bPressedJump = I.bJump && (I.bJump != Old.bJump);
+	bPressedDodge = I.bDodg && (I.bDodg != Old.bDodg);
+
+	if (RemoteRole == ROLE_AutonomousProxy) {
+		if (zzUTPure.Settings.bEnablePingCompensatedSpawn) {
+			if (bHidden && I.bLive && (IsInState('PlayerWalking') || IsInState('PlayerSwimming'))) {
+				bClientDead = false;
+				bHidden = false;
+				SetCollision(true, true, true);
+				IGPlus_SendRespawnNoficiation();
+			}
+		}
+
+		// handle firing and alt-firing on server
+		if (I.bFire) {
+			if (bFire == 0) {
+				if (I.bLive && I.bFFir && Weapon != none)
+					Weapon.ForceFire();
+				else
+					Fire(0);
+			}
+			bFire = 1;
+		} else {
+			bFire = 0;
+		}
+
+		if (I.bAFir) {
+			if (bAltFire == 0) {
+				if (I.bLive && I.bFAFr && Weapon != none)
+					Weapon.ForceAltFire();
+				else
+					AltFire(0);
+			}
+			bAltFire = 1;
+		} else {
+			bAltFire = 0;
+		}
+	} else if (RemoteRole == ROLE_Authority) {
+		bDodging = Old.SavedDodging;
+		DodgeDir = Old.SavedDodgeDir;
+		DodgeClickTimer = Old.SavedDodgeClickTimer;
+	}
+
+	ViewRotation = I.SavedViewRotation;
+
+	// 
+
+	IGPlus_TPFix_LastTouched = none;
+	HandleWalking();
+	PlayerMove(I.Delta);
+	AutonomousPhysics(I.Delta);
+	CorrectTeleporterVelocity();
+
+	I.SavedLocation = Location;
+	I.SavedVelocity = Velocity;
+
+	aBaseX = OldBaseX;
+	aBaseY = OldBaseY;
+	aBaseZ = OldBaseZ;
+	aMouseX = OldMouseX;
+	aMouseY = OldMouseY;
+	aForward = OldForward;
+	aStrafe = OldStrafe;
+	aUp = OldUp;
+	aLookUp = OldLookUp;
+	aTurn = OldTurn;
+	bRun = OldRun;
+	bDuck = OldDuck;
+}
 
 function ReplicateMove
 (
@@ -3707,6 +4056,77 @@ function IGPlus_MergeMove(IGPlus_SavedMove PendMove, float DeltaTime, vector New
 	PendMove.bForceAltFire = PendMove.bForceAltFire || bJustAltFired;
 
 	PendMove.Delta = TotalTime;
+}
+
+function IGPlus_ReplicateInput(float Delta) {
+	local float RealDelta;
+	local IGPlus_SavedInput ReferenceInput;
+	local vector NewOffset, TargetLoc;
+	local ReplBuffer B;
+	local int i;
+
+	// Higor: process smooth adjustment.
+	if (VSize(IGPlus_AdjustLocationOffset) > 0) {
+		TargetLoc = Location + IGPlus_AdjustLocationOffset;
+		NewOffset = IGPlus_AdjustLocationOffset * Exp(-20*Delta);
+		MoveSmooth(IGPlus_AdjustLocationOffset - NewOffset);
+		IGPlus_AdjustLocationOffset = TargetLoc - Location;
+	} else {
+		IGPlus_AdjustLocationOffset = vect(0,0,0);
+	}
+
+	IGPlus_TPFix_LastTouched = none;
+	AutonomousPhysics(Delta);
+	CorrectTeleporterVelocity();
+
+	IGPlus_SavedInputChain.Add(Delta, self);
+	if (bTraceInput && IGPlus_InputLogFile != none)
+		IGPlus_InputLogFile.LogInput(IGPlus_SavedInputChain.Newest);
+
+	NetStatsElem.LocationError = VSize(IGPlus_AdjustLocationOffset);
+	NetStatsElem.UnconfirmedTime = (Level.TimeSeconds - IGPlus_SavedInputChain.Oldest.TimeStamp) / Level.TimeDilation;
+
+	RealDelta = (Level.TimeSeconds - IGPlus_LastInputSendTime) / Level.TimeDilation;
+	if (RealDelta < TimeBetweenNetUpdates - ClientUpdateTime)
+		return;
+
+	ClientUpdateTime = FClamp(RealDelta - TimeBetweenNetUpdates + ClientUpdateTime, -TimeBetweenNetUpdates, TimeBetweenNetUpdates);
+	IGPlus_LastInputSendTime = Level.TimeSeconds;
+
+	IGPlus_InputReplicationBuffer.Reset();
+	ReferenceInput = IGPlus_SavedInputChain.SerializeNodes(10, IGPlus_InputReplicationBuffer);
+
+	if (IGPlus_InputReplicationBuffer.NumBits > 0) {
+		for (i = 0; i < arraycount(B.Data); i++)
+			B.Data[i] = IGPlus_InputReplicationBuffer.BitsData[i];
+		ServerApplyInput(ReferenceInput.TimeStamp, IGPlus_InputReplicationBuffer.NumBits, B);
+	}
+
+	if ( (Weapon != None) && !Weapon.IsAnimating() )
+	{
+		if ( (Weapon == ClientPending) || (Weapon != OldClientWeapon) )
+		{
+			if ( Weapon.Owner != self ) //Non-respawnable weapon was picked up and Owner wasn't replicated yet
+				Weapon.SetOwner(self); //Simulate owner change locally
+			if ( Weapon.IsInState('ClientActive') )
+				AnimEnd();
+			else
+				Weapon.GotoState('ClientActive');
+			if ( (Weapon != ClientPending) && (myHUD != None) && myHUD.IsA('ChallengeHUD') )
+				ChallengeHUD(myHUD).WeaponNameFade = 1.3;
+			if ( (Weapon != OldClientWeapon) && (OldClientWeapon != None) )
+				OldClientWeapon.GotoState('');
+
+			ClientPending = None;
+			bNeedActivate = false;
+		}
+		else
+		{
+			Weapon.GotoState('');
+			Weapon.TweenToStill();
+		}
+	}
+	OldClientWeapon = Weapon;
 }
 
 function xxReplicateMove(
@@ -3846,6 +4266,9 @@ function xxReplicateMove(
 	// on client side, save extra buffered time in LastUpdateTime
 	RealDelta = PendingMove.Delta / Level.TimeDilation;
 
+	NetStatsElem.LocationError = VSize(IGPlus_AdjustLocationOffset * AdjustAlpha);
+	NetStatsElem.UnconfirmedTime = (Level.TimeSeconds - CurrentTimeStamp) / Level.TimeDilation;
+
 	if (RealDelta < TimeBetweenNetUpdates - ClientUpdateTime && CanMergeMove(NewMove, OldAccel))
 		return;
 
@@ -3888,6 +4311,7 @@ function xxReplicateMove(
 
 function SendSavedMove(IGPlus_SavedMove Move, optional IGPlus_SavedMove OldMove) {
 	local int MiscData, MiscData2;
+	local int MoveDeltaTime;
 	local vector RelLoc;
 	local int OldMoveData1, OldMoveData2;
 
@@ -3897,6 +4321,8 @@ function SendSavedMove(IGPlus_SavedMove Move, optional IGPlus_SavedMove OldMove)
 		RelLoc = Location;
 	else
 		RelLoc = Location - Base.Location;
+
+	MoveDeltaTime or_eq Clamp(int(Move.Delta * 65536), 0, 0xFFFFFF) << 8;
 
 	                   MiscData or_eq (Move.AddVelocityId & 0xF) << 28;
 	                   MiscData or_eq (TlocCounter << 26);
@@ -3933,7 +4359,7 @@ function SendSavedMove(IGPlus_SavedMove Move, optional IGPlus_SavedMove OldMove)
 
 	xxServerMove(
 		Move.TimeStamp,
-		int(Move.Delta * 65536),
+		MoveDeltaTime,
 		Move.Acceleration * 10.0,
 		RelLoc.X,
 		RelLoc.Y,
@@ -5034,8 +5460,7 @@ function Died(pawn Killer, name damageType, vector HitLocation)
 	if (Weapon.IsA('TournamentWeapon'))
 		TournamentWeapon(Weapon).bCanClientFire = false;
 	Velocity.Z *= 1.3;
-	if ( Gibbed(damageType) )
-	{
+	if (Gibbed(DamageType)) {
 		SpawnGibbedCarcass();
 		if ( bIsPlayer )
 			HidePlayer();
@@ -5083,8 +5508,9 @@ event ServerTick(float DeltaTime) {
 					zzUTPure.GetForcedSettingMode(IGPlus_ForcedSettings_Index));
 			}
 			IGPlus_ForcedSettings_Index++;
-			if (IGPlus_ForcedSettings_Index == Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings)))
-				IGPlus_ForcedSettingsApply(IGPlus_ForcedSettings_Counter);
+		} else if (IGPlus_ForcedSettings_Index == Min(zzUTPure.Settings.ForcedSettings.Length, arraycount(IGPlus_ForcedSettings))) {
+			IGPlus_ForcedSettingsApply(IGPlus_ForcedSettings_Counter);
+			IGPlus_ForcedSettings_Index++;
 		}
 	}
 
@@ -5158,7 +5584,7 @@ state FeigningDeath
 		xxUpdateRotation(DeltaTime, 1);
 		SetRotation(currentRot);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, NewAccel, DODGE_None, Rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, NewAccel, DODGE_None, Rot(0,0,0));
@@ -5170,6 +5596,9 @@ state FeigningDeath
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function BeginState()
@@ -5215,7 +5644,7 @@ state PlayerSwimming
 
 		if ( bUpAndOut && !Region.Zone.bWaterZone && CheckWaterJump(Temp) ) //check for waterjump
 		{
-			velocity.Z = 220 + 2 * CollisionRadius; //set here so physics uses this for remainder of tick
+			velocity.Z = 330 + 2 * CollisionRadius; //set here so physics uses this for remainder of tick
 			PlayDuck();
 			GotoState('PlayerWalking');
 		}
@@ -5226,6 +5655,9 @@ state PlayerSwimming
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(float DeltaTime)
@@ -5256,7 +5688,7 @@ state PlayerSwimming
 		oldRotation = Rotation;
 		xxUpdateRotation(DeltaTime, 2);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, NewAccel, DODGE_None, OldRotation - Rotation);
 		else
 			ProcessMove(DeltaTime, NewAccel, DODGE_None, OldRotation - Rotation);
@@ -5301,6 +5733,9 @@ state PlayerFlying
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(float DeltaTime)
@@ -5318,7 +5753,7 @@ state PlayerFlying
 		// Update rotation.
 		xxUpdateRotation(DeltaTime, 2);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
@@ -5334,6 +5769,9 @@ state CheatFlying
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(float DeltaTime)
@@ -5352,7 +5790,7 @@ state CheatFlying
 
 		xxUpdateRotation(DeltaTime, 1);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
@@ -5414,12 +5852,14 @@ ignores SeePlayer, HearNoise, Bump;
 		local float VelocityZ;
 		local float DodgeXY;
 		local float DodgeZ;
+		local vector OldVel;
 
 		if ( bIsCrouching || (Physics != PHYS_Walking && Physics != PHYS_Falling) )
 			return;
 		if (Physics == PHYS_Falling && bCanWallDodge == false)
 			return;
 
+		OldVel = Velocity;
 		GetAxes(Rotation.Yaw*rot(0,1,0),X,Y,Z);
 
 		if (Physics == PHYS_Falling) {
@@ -5469,8 +5909,8 @@ ignores SeePlayer, HearNoise, Bump;
 		DodgeDir = DODGE_Active;
 		bDodging = true;
 		SetPhysics(PHYS_Falling);
-		if (Settings.bDebugMovement && Level.NetMode == NM_Client)
-			ClientDebugMessage("Dodged"@DodgeMove);
+		if (Settings.bDebugMovement && Level.NetMode == NM_Client && bUpdating == false)
+			ClientDebugMessage("Dodged"@DodgeMove@bUpdating@(Rotation.Yaw&0xFFFF)@"|"@int(Location.X)@int(Location.Y)@int(Location.Z)@"|"@int(Velocity.X)@int(Velocity.Y)@int(Velocity.Z)@"|"@int(OldVel.X)@int(OldVel.Y)@int(OldVel.Z));
 	}
 
 	function PlayerMove( float DeltaTime )
@@ -5482,7 +5922,7 @@ ignores SeePlayer, HearNoise, Bump;
 		local float Speed2D;
 		local bool	bSaveJump;
 		local name AnimGroupName;
-		local float Now;
+		local float MinTime;
 
 		if (Mesh == None)
 		{
@@ -5505,40 +5945,49 @@ ignores SeePlayer, HearNoise, Bump;
 			DodgeMove = DODGE_Active;
 		else
 			DodgeMove = DODGE_None;
+
+		LastTimeForward -= DeltaTime;
+		LastTimeBack    -= DeltaTime;
+		LastTimeLeft    -= DeltaTime;
+		LastTimeRight   -= DeltaTime;
+
 		if (DodgeClickTime > 0.0)
 		{
 			if ( DodgeDir < DODGE_Active )
 			{
-				Now = Level.TimeSeconds;
+				MinTime = MinDodgeClickTime;
+				if (Player != none && Player.IsA('Viewport'))
+					MinTime = Settings.MinDodgeClickTime;
+
 				OldDodge = DodgeDir;
 				DodgeDir = DODGE_None;
 
 				if (bEdgeForward && bWasForward)
 				{
-					if (Now - LastTimeForward > Settings.MinDodgeClickTime) {
+					if (LastTimeForward <= 0.0) {
 						DodgeDir = DODGE_Forward;
-						LastTimeForward = Now;
+						LastTimeForward = MinTime;
 					}
 				}
 				else if (bEdgeBack && bWasBack)
 				{
-					if (Now - LastTimeBack > Settings.MinDodgeClickTime) {
+					if (LastTimeBack <= 0.0) {
 						DodgeDir = DODGE_Back;
-						LastTimeBack = Now;
+						LastTimeBack = MinTime;
 					}
 				}
 				else if (bEdgeLeft && bWasLeft)
 				{
-					if (Now - LastTimeLeft > Settings.MinDodgeClickTime) {
+					if (LastTimeLeft <= 0.0) {
 						DodgeDir = DODGE_Left;
-						LastTimeLeft = Now;
+						LastTimeLeft = MinTime;
 					}
 				}
 				else if (bEdgeRight && bWasRight)
 				{
-					if (Now - LastTimeRight > Settings.MinDodgeClickTime) {
+					if (LastTimeRight <= 0.0) {
 						DodgeDir = DODGE_Right;
-						LastTimeRight = Now;
+						LastTimeRight = MinTime;
 					}
 				}
 
@@ -5608,8 +6057,9 @@ ignores SeePlayer, HearNoise, Bump;
 
 			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
 			//add bobbing when walking
-			if ( !bShowMenu )
+			if ( !bShowMenu && bUpdating == false ) {
 				CheckBob(DeltaTime, Speed2D, Y);
+			}
 		}
 		else if ( !bShowMenu )
 		{
@@ -5629,11 +6079,16 @@ ignores SeePlayer, HearNoise, Bump;
 		else
 			bSaveJump = false;
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, NewAccel, DodgeMove, OldRotation - Rotation);
 		else
 			ProcessMove(DeltaTime, NewAccel, DodgeMove, OldRotation - Rotation);
 		bPressedJump = bSaveJump;
+
+		if (bCanWallDodge && DodgeDir == DODGE_Active && MultiDodgesRemaining > 0) {
+			MultiDodgesRemaining -= 1;
+			DodgeDir = DODGE_None;
+		}
 	}
 
 	event ServerTick(float DeltaTime) {
@@ -5646,12 +6101,33 @@ ignores SeePlayer, HearNoise, Bump;
 	{
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
-		Super.PlayerTick(DeltaTime);
 
-		if (bCanWallDodge && DodgeDir == DODGE_Active && MultiDodgesRemaining > 0) {
-			MultiDodgesRemaining -= 1;
+		if ( bUpdatePosition && IGPlus_EnableInputReplication == false )
+			ClientUpdatePosition();
+
+		//
+		// stijn: if the server corrected our position in the middle of
+		// a dodge, we might end up in DODGE_Active state with our
+		// Physics set to PHYS_Walking. If this happened before 469,
+		// the player would not be able to dodge again until triggering
+		// a landed event (which usually meant you had to jump).
+		// Here, we just wait for the dodge animation to play out and
+		// then manually force a dodgedir reset.
+		// 
+		if (DodgeDir == DODGE_Active &&
+		    Physics != PHYS_Falling &&
+			GetAnimGroup(AnimSequence) != 'Dodge' &&
+			GetAnimGroup(AnimSequence) != 'Jumping')
+		{
+			bDodging = false;
 			DodgeDir = DODGE_None;
-		}
+			DodgeClickTimer = DodgeClickTime;
+		}	
+
+		PlayerMove(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function BeginState()
@@ -5691,6 +6167,9 @@ state PlayerWaiting
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(float DeltaTime)
@@ -5709,7 +6188,7 @@ state PlayerWaiting
 
 		xxUpdateRotation(DeltaTime, 1);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
@@ -5894,6 +6373,9 @@ state PlayerSpectating
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(float DeltaTime)
@@ -5912,7 +6394,7 @@ state PlayerSpectating
 
 		xxUpdateRotation(DeltaTime, 1);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, Acceleration, DODGE_None, rot(0,0,0));
@@ -5928,6 +6410,9 @@ state PlayerWaking
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(Float DeltaTime)
@@ -5943,7 +6428,7 @@ state PlayerWaking
 			}
 		}
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, vect(0,0,0), DODGE_None, rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, vect(0,0,0), DODGE_None, rot(0,0,0));
@@ -5971,14 +6456,16 @@ state Dying
 		local bool bDeathMatchSave;
 		local bool Result;
 
-		if (zzUTPure.Settings.bEnablePingCompensatedSpawn) {
+		if (RemoteRole == ROLE_AutonomousProxy && zzUTPure.Settings.bEnablePingCompensatedSpawn) {
 			bDeathMatchSave = Level.Game.bDeathMatch;
-			Level.Game.bDeathMatch = false;
+			Level.Game.bDeathMatch = false; // this avoids the sound respawns generate, we will play our own later
+			// see DeathMatchPlus.PlayTeleportEffect()
 		}
 
+		Level.Game.DiscardInventory(self); // last possible place to rid ourselves of old inventory
 		Result = Level.Game.RestartPlayer(self);
 
-		if (zzUTPure.Settings.bEnablePingCompensatedSpawn)
+		if (RemoteRole == ROLE_AutonomousProxy && zzUTPure.Settings.bEnablePingCompensatedSpawn)
 			Level.Game.bDeathMatch = bDeathMatchSave;
 
 		return Result;
@@ -5991,7 +6478,9 @@ state Dying
 
 		if ( GameRestartPlayer() )
 		{
-			ServerTimeStamp = 0;
+			if (IGPlus_EnableInputReplication == false) {
+				ServerTimeStamp = 0;
+			}
 			TimeMargin = 0;
 			Enemy = None;
 			Level.Game.StartPlayer(self);
@@ -6017,7 +6506,7 @@ state Dying
 
 		global.ServerTick(DeltaTime);
 
-		if (RealTimeDead > 2*zzUTPure.Settings.MaxTradeTimeMargin && Weapon != none)
+		if (RealTimeDead > 2*zzUTPure.Settings.MaxTradeTimeMargin)
 			Level.Game.DiscardInventory(self);
 	}
 
@@ -6044,6 +6533,9 @@ state Dying
 				ViewRotation = Normalize(ViewRotation + DeltaRotation * (1 - Exp(-3.0 * DeltaTime)));
 			}
 		}
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	simulated function BeginState() {
@@ -6133,11 +6625,15 @@ state Dying
 		ViewShake(DeltaTime);
 		ViewFlash(DeltaTime);
 
-		ClientUpdateTime += DeltaTime;
-		if (ClientUpdateTime > TimeBetweenNetUpdates) {
-			ClientUpdateTime = 0;
-			IGPlus_AdjustLocationAlpha = 0; // avoid adjustments persisting until respawn
-			xxServerMoveDead(Level.TimeSeconds, DeltaTime, ((ViewRotation.Pitch << 16) | (ViewRotation.Yaw & 0xFFFF)));
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication == false) {
+			ClientUpdateTime += DeltaTime;
+			if (ClientUpdateTime > TimeBetweenNetUpdates) {
+				ClientUpdateTime = 0;
+				IGPlus_AdjustLocationAlpha = 0; // avoid adjustments persisting until respawn
+				xxServerMoveDead(Level.TimeSeconds, DeltaTime, ((ViewRotation.Pitch << 16) | (ViewRotation.Yaw & 0xFFFF)));
+			}
+		} else {
+			ProcessMove(DeltaTime, vect(0,0,0), DODGE_None, rot(0,0,0));
 		}
 	}
 
@@ -6199,7 +6695,6 @@ state Dying
 		SetPhysics(PHYS_None);
 		Super.EndState();
 		LastKillTime = 0;
-		bJustRespawned = true;
 		LastKiller = none;
 		ClientUpdateTime = 0;
 		bDodging = false;
@@ -6217,7 +6712,6 @@ state CountdownDying extends Dying
 		bBehindView = false;
 		if (Player != none)
 			ServerReStartPlayer();
-		bJustRespawned = true;
 		bShowScores = false;
 		ClientUpdateTime = 0;
 	}
@@ -6235,6 +6729,9 @@ ignores SeePlayer, HearNoise, KilledBy, Bump, HitWall, HeadZoneChange, FootZoneC
 		xxPlayerTickEvents(DeltaTime);
 		zzTick = DeltaTime;
 		Super.PlayerTick(DeltaTime);
+
+		if (Role < ROLE_Authority && IGPlus_EnableInputReplication)
+			IGPlus_ReplicateInput(DeltaTime);
 	}
 
 	function PlayerMove(float DeltaTime)
@@ -6265,7 +6762,7 @@ ignores SeePlayer, HearNoise, KilledBy, Bump, HitWall, HeadZoneChange, FootZoneC
 		ViewShake(DeltaTime);
 		ViewFlash(DeltaTime);
 
-		if ( Role < ROLE_Authority ) // then save this move and replicate it
+		if ( Role < ROLE_Authority && IGPlus_EnableInputReplication == false ) // then save this move and replicate it
 			xxReplicateMove(DeltaTime, vect(0,0,0), DODGE_None, rot(0,0,0));
 		else
 			ProcessMove(DeltaTime, vect(0,0,0), DODGE_None, rot(0,0,0));
@@ -6451,8 +6948,12 @@ function xxPlayerTickEvents(float DeltaTime)
 
 	if (!bDemoStarted && zzbGameStarted && (zzbForceDemo || Settings.bAutoDemo && (DeathMatchPlus(Level.Game) == none || DeathMatchPlus(Level.Game).CountDown < 1)))
 		xxClientDemoRec();
-	if (bDemoStarted && GameReplicationInfo.GameEndedComments != "" && (zzbForceDemo || Settings.bAutoDemo))
-		ConsoleCommand("StopDemo");
+	if (bDemoStarted && (zzbForceDemo || Settings.bAutoDemo) && GameReplicationInfo.GameEndedComments != "") {
+		if (IGPlus_GameEndedTime == 0)
+			IGPlus_GameEndedTime = Level.TimeSeconds;
+		else if (Level.TimeSeconds >= IGPlus_GameEndedTime + 2.0)
+			ConsoleCommand("StopDemo");
+	}
 }
 
 static function SetForcedSkin(Actor SkinActor, int selectedSkin, bool bTeamGame, int TeamNum) {
@@ -6635,10 +7136,7 @@ function int GetForcedSkinForPlayer(PlayerReplicationInfo PRI) {
 		if (Settings.bSkinEnemyUseIndexMap) {
 			bbPRI = bbPlayerReplicationInfo(PRI);
 			if (bbPRI != none && bbPRI.SkinIndex >= 0) {
-				if (GameReplicationInfo.bTeamGame)
-					return Settings.SkinEnemyIndexMap[(bbPRI.Team << 4) + bbPRI.SkinIndex];
-				else
-					return Settings.SkinEnemyIndexMap[bbPRI.SkinIndex];
+				return Settings.SkinEnemyIndexMap[bbPRI.SkinIndex];
 			}
 		}
 		if (PRI.bIsFemale) {
@@ -6928,6 +7426,13 @@ simulated function vector IGPlus_CurrentLocation() {
 		return Location;
 }
 
+simulated function bool IGPlus_LocationOffsetFix_WasVelocityReplicated() {
+	if (Abs(Velocity.X - int(Velocity.X)) > 0.0001 || Abs(Velocity.Y - int(Velocity.Y)) > 0.0001)
+		return false;
+
+	return true;
+}
+
 simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	local float ExtrapolationTime;
 	local bool bReplicatedLocation;
@@ -6944,15 +7449,12 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 		IGPlus_LocationOffsetFix_CollisionDummy.SetCollision(false, false, false);
 	}
 
-	// detect whether server replicated new velocity
-	if (Velocity.X == 0.0123 && Velocity.Y == 0.0123) {
-		bReplicatedVelocity = false;
+	bReplicatedVelocity = IGPlus_LocationOffsetFix_WasVelocityReplicated();
+	if (bReplicatedVelocity == false) {
 		Velocity = IGPlus_LocationOffsetFix_Velocity;
 
 		if (IGPlus_LocationOffsetFix_OnGround == false)
 			Velocity += 0.5 * Region.Zone.ZoneGravity * DeltaTime;
-	} else {
-		bReplicatedVelocity = true;
 	}
 
 	// detect whether server replicated new location
@@ -6968,11 +7470,19 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	}
 
 	VelXpol = Velocity;
+	if (Base != none)
+		VelXpol += Base.Velocity;
 	if (IGPlus_LocationOffsetFix_OnGround && bCanFly == false && Region.Zone.bWaterZone == false) {
-		VelXpol.Z = 0.0;
+		// Without the following if-else-statement VelXpol will contain a small
+		// downward Z velocity (gravity?) after players stand still. This will
+		// cause significant mispredictions as players just slide down slopes.
+		if (Base != none)
+			VelXpol.Z = Base.Velocity.Z;
+		else
+			VelXpol.Z = 0;
 
 		// Deal with predicting movement up/down ramps
-		CosAlpha = Normal(VelXpol) dot IGPlus_LocationOffsetFix_GroundNormal;
+		CosAlpha = Normal(VelXpol*vect(1,1,0)) dot IGPlus_LocationOffsetFix_GroundNormal;
 		SinAlpha = Sqrt(1.0 - CosAlpha*CosAlpha); // sin(a)² + cos(a)² = 1 // sin(a) = sqrt(1 - cos(a)²)
 		
 		// Given the following:
@@ -6989,17 +7499,25 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 		// and velocity.
 		// Alpha* = Alpha - 90° = Alpha + 270°
 		// tan(Alpha*) = -cos(Alpha)/sin(Alpha)
-		VelXpol.Z = (-CosAlpha / SinAlpha) * VSize(VelXpol);
+		VelXpol.Z += (-CosAlpha / SinAlpha) * VSize(VelXpol*vect(1,1,0));
 	}
-
-	// 
-	IGPlus_LocationOffsetFix_PredictionOffset *=
-		Exp(-FMax(VSize(IGPlus_LocationOffsetFix_PredictionOffset)*5, 27) * DeltaTime);
 
 	// dont let misprediction grow too large
 	// also, dont smoothly relocate teleporting players
-	if (VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 100)
+	if (VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 100 || VSize(Velocity) < 0.0001)
 		IGPlus_LocationOffsetFix_PredictionOffset = vect(0,0,0);
+
+	// 
+	if (IGPlus_LocationOffsetFix_PredCompatMode) {
+		if (bReplicatedLocation) {
+			if (VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 40)
+				IGPlus_LocationOffsetFix_PredictionOffset *= 0.65;
+			else
+				IGPlus_LocationOffsetFix_PredictionOffset *= 0.85;
+		}
+	} else {
+		IGPlus_LocationOffsetFix_PredictionOffset *= Exp(-25 * DeltaTime);
+	}
 
 	bCollideWorld = false;
 	SetLocation(IGPlus_LocationOffsetFix_OldLocation+IGPlus_LocationOffsetFix_PredictionOffset);
@@ -7194,8 +7712,8 @@ simulated function IGPlus_LocationOffsetFix_Before() {
 	IGPlus_LocationOffsetFix_Velocity = Velocity;
 	IGPlus_LocationOffsetFix_OnGround = IGPlus_LocationOffsetFix_IsOnGround(IGPlus_LocationOffsetFix_GroundNormal);
 
-	SetLocation(vect(65535, 65535, 65535));
-	Velocity = vect(0.0123,0.0123,0);
+	SetLocation(vect(65535, 65535, 65535) + vect(512.0,512.0,512.0)*PlayerReplicationInfo.PlayerID);
+	Velocity = IGPlus_LocationOffsetFix_DummyVel;
 	IGPlus_LocationOffsetFix_SafeLocation = Location;
 
 	if (bHidden == false &&
@@ -7237,11 +7755,37 @@ function IGPlus_LocationOffsetFix_TickBefore() {
 	}
 }
 
+function IGPlus_FixNetspeed() {
+	local int NetspeedTarget;
+	local int Netspeed;
+
+	if (IGPlus_ForcedSettings_Applied && Player.CurrentNetspeed != zzNetspeed) {
+		Netspeed = int(ConsoleCommand("get ini:Engine.Engine.NetworkDevice MaxClientRate"));
+		if (Netspeed < Settings.DesiredNetspeed) {
+			ConsoleCommand("set ini:Engine.Engine.NetworkDevice MaxClientRate"@Settings.DesiredNetspeed);
+			Netspeed = Settings.DesiredNetspeed;
+		}
+		if (zzMinimumNetspeed > 0 && Netspeed < zzMinimumNetspeed) {
+			xxServerCheater("NS");
+			return;
+		}
+		if (zzMaximumNetspeed > 0 && Netspeed < zzMaximumNetspeed)
+			zzMaximumNetspeed = Netspeed;
+
+		NetspeedTarget = Settings.DesiredNetspeed;
+		if (zzMinimumNetspeed != 0 && NetspeedTarget < zzMinimumNetspeed)
+			NetspeedTarget = zzMinimumNetspeed;
+		if (zzMaximumNetspeed != 0 && NetspeedTarget > zzMaximumNetspeed)
+			NetspeedTarget = zzMaximumNetspeed;
+
+		ConsoleCommand("Netspeed"@NetspeedTarget);
+		zzNetspeed = Player.CurrentNetspeed;
+	}
+}
+
 event PostRender( canvas zzCanvas )
 {
 	local int CH;
-	local int NetspeedTarget;
-	local int Netspeed;
 
 	if (Settings.bUseCrosshairFactory) {
 		CH = MyHud.Crosshair;
@@ -7266,31 +7810,7 @@ event PostRender( canvas zzCanvas )
 	xxRenderLogo(zzCanvas);
 	xxCleanAvars();
 
-	if (IGPlus_ForcedSettings_Applied && Player.CurrentNetspeed != zzNetspeed) {
-		Netspeed = int(ConsoleCommand("get ini:Engine.Engine.NetworkDevice MaxClientRate"));
-		if (Netspeed < Settings.DesiredNetspeed) {
-			ConsoleCommand("set ini:Engine.Engine.NetworkDevice MaxClientRate"@Settings.DesiredNetspeed);
-			Netspeed = Settings.DesiredNetspeed;
-		}
-		if (zzMinimumNetspeed > 0 && Netspeed < zzMinimumNetspeed) {
-			xxServerCheater("NS");
-			goto netspeed_end;
-		}
-		if (zzMaximumNetspeed > 0 && Netspeed < zzMaximumNetspeed)
-			zzMaximumNetspeed = Netspeed;
-
-		NetspeedTarget = Settings.DesiredNetspeed;
-		if (zzMinimumNetspeed != 0 && NetspeedTarget < zzMinimumNetspeed)
-			NetspeedTarget = zzMinimumNetspeed;
-		if (zzMaximumNetspeed != 0 && NetspeedTarget > zzMaximumNetspeed)
-			NetspeedTarget = zzMaximumNetspeed;
-
-		ConsoleCommand("Netspeed"@NetspeedTarget);
-		zzNetspeed = Player.CurrentNetspeed;
-
-	netspeed_end:
-		//
-	}
+	IGPlus_FixNetspeed();
 
 	if (zzDelayedStartTime != 0.0)
 	{
@@ -7320,10 +7840,15 @@ event PostRender( canvas zzCanvas )
 			HitMarkerTestTeam = 0;
 	}
 
-	if (Level.Pauser != "" && PendingMove != none) {
-		PendingMove.Destroy();
-		PendingMove = none;
+	if (Level.Pauser != "") {
+		if (PendingMove != none) {
+			PendingMove.Destroy();
+			PendingMove = none;
+		}
+		IGPlus_SavedInputChain.RemoveOutdatedNodes(Level.TimeSeconds);
 	}
+
+	NetStatsElem.PostRender(zzCanvas, Settings);
 
 	IGPlus_LocationOffsetFix_TickBefore();
 
@@ -7569,8 +8094,6 @@ function xxServerCheater(string zzCode)
 			zzS = "Mutator Kick!";
 		else if (zzCode == "TD")
 			zzS = "Bad TimeDilation!";
-		else if (zzCode == "FA")
-			zzS = "Bad FireAdjust!";
 		else
 			zzS = "UNKNOWN!";
 		zzCode = zzCode@"-"@zzS;
@@ -9124,14 +9647,18 @@ exec function ZoomToggle(float SensitivityX, optional float SensitivityY) {
 }
 
 exec function IGPlus_FOV(float NewFov) {
+	local ENetRole Saved;
+	local float FovLimit;
 	if( (NewFov >= 80.0) || Level.bAllowFOV || bAdmin || (Level.Netmode==NM_Standalone) )
 	{
-		// stijn: fix for game types not enforcing FOV limits
-		MinFOV = FClamp(MinFOV, 1.0  , 80.0  );
-		MaxFOV = FClamp(MaxFOV, 130.0, 360.0 );
-		// end fix
+		Saved = Role;
+		Role = ROLE_Authority;
+		FovLimit = float(GetPropertyText("MaxFOV"));
+		FovLimit = FClamp(FovLimit, 130.0, 360.0);
+		SetPropertyText("MaxFOV", string(FovLimit));
+		Role = Saved;
 		
-		DefaultFOV = FClamp(NewFov, MinFOV, MaxFOV);
+		DefaultFOV = FClamp(NewFov, 80.0, FovLimit);
 		DesiredFOV = DefaultFOV;
 	}
 }
@@ -9204,6 +9731,23 @@ exec function DrawServerLocation() {
 	IGPlus_LocationOffsetFix_DrawServerLocation = !IGPlus_LocationOffsetFix_DrawServerLocation;
 }
 
+simulated function SetMesh() {
+	if (bDeleteMe)
+		return;
+	super.SetMesh();
+}
+
+exec function TraceInput() {
+	if (bTraceInput) {
+		ClientMessage("Stop tracing input");
+		IGPlus_InputLogFile.StopLog();
+	} else {
+		ClientMessage("Start tracing input");
+		IGPlus_InputLogFile.StartLog();
+	}
+	bTraceInput = !bTraceInput;
+}
+
 defaultproperties
 {
 	bNewNet=True
@@ -9233,4 +9777,7 @@ defaultproperties
 	LocalExtrapolationOtherPingFactor=0.0
 
 	IGPlus_EnableDualButtonSwitch=True
+
+	IGPlus_LocationOffsetFix_PredCompatMode=True
+	IGPlus_EnableInputReplication=True
 }

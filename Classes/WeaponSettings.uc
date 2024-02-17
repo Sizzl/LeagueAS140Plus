@@ -14,6 +14,12 @@ var config bool bReplaceRocketLauncher;
 var config bool bReplaceSniperRifle;
 var config bool bReplaceWarheadLauncher;
 
+var config bool  bEnableEnhancedSplash;
+var config bool  bEnableEnhancedSplashBio;
+var config bool  bEnableEnhancedSplashCombo;
+var config float SplashMaxDiffraction;
+var config float SplashMinDiffractionDistance;
+
 var config float WarheadSelectTime;
 var config float WarheadDownTime;
 
@@ -40,6 +46,10 @@ var config float FlakPostSelectTime;
 var config float FlakDownTime;
 var config float FlakChunkDamage;
 var config float FlakChunkMomentum;
+var config float FlakChunkLifespan;
+var config float FlakChunkDropOffStart;
+var config float FlakChunkDropOffEnd;
+var config float FlakChunkDropOffDamageRatio;
 var config float FlakSlugDamage;
 var config float FlakSlugHurtRadius;
 var config float FlakSlugMomentum;
@@ -57,6 +67,7 @@ var config float RipperSecondaryMomentum;
 var config float MinigunSelectTime;
 var config float MinigunDownTime;
 var config float MinigunSpinUpTime;
+var config float MinigunUnwindTime;
 var config float MinigunBulletInterval;
 var config float MinigunAlternateBulletInterval;
 var config float MinigunMinDamage;
@@ -124,6 +135,8 @@ var config float TranslocatorOutSelectTime;
 var config float TranslocatorDownTime;
 var config float TranslocatorHealth;
 
+var config string DefaultWeaponClass;
+
 defaultproperties
 {
 	bReplaceImpactHammer=True
@@ -139,6 +152,12 @@ defaultproperties
 	bReplaceRocketLauncher=True
 	bReplaceSniperRifle=True
 	bReplaceWarheadLauncher=True
+
+	bEnableEnhancedSplash=True
+	bEnableEnhancedSplashBio=False
+	bEnableEnhancedSplashCombo=False
+	SplashMaxDiffraction=0.5
+	SplashMinDiffractionDistance=50.0
 
 	WarheadSelectTime=0.5
 	WarheadDownTime=0.233333
@@ -166,6 +185,10 @@ defaultproperties
 	FlakDownTime=0.333333
 	FlakChunkDamage=16
 	FlakChunkMomentum=1.0
+	FlakChunkLifespan=2.9
+	FlakChunkDropOffStart=0.0
+	FlakChunkDropOffEnd=0.0
+	FlakChunkDropOffDamageRatio=1.0
 	FlakSlugDamage=70
 	FlakSlugHurtRadius=150
 	FlakSlugMomentum=1.0
@@ -183,6 +206,7 @@ defaultproperties
 	MinigunSelectTime=0.555556
 	MinigunDownTime=0.333333
 	MinigunSpinUpTime=0.130
+	MinigunUnwindTime=0.866666
 	MinigunBulletInterval=0.080
 	MinigunAlternateBulletInterval=0.050
 	MinigunMinDamage=5
@@ -249,4 +273,6 @@ defaultproperties
 	TranslocatorOutSelectTime=0.27
 	TranslocatorDownTime=0.212121
 	TranslocatorHealth=65.0
+
+	DefaultWeaponClass=""
 }

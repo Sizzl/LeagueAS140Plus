@@ -11,16 +11,24 @@ var int ChunkIndex;
 
 function ProcessTouch (Actor Other, vector HitLocation)
 {
+	// Physics for chunks is split into 3 phases:
+	// PHYS_Projectile -- immediately after being fired, default physics
+	// PHYS_Falling -- after hitting surface while in PHYS_Projectile
+	// PHYS_None -- after touching standable ground while in PHYS_Falling
+
+	if (Physics == PHYS_None)
+		return;
+
 	if ( (Chunk(Other) == None) && ((Physics == PHYS_Falling) || (Other != Instigator)) )
 	{
 		speed = VSize(Velocity);
-		If ( speed > 200 )
+		if ( speed > 200 )
 		{
 			if ( Role == ROLE_Authority )
 			{
 				Chunkie.HitSomething(Self, Other);
 				Other.TakeDamage(
-					Chunkie.STM.WeaponSettings.FlakChunkDamage,
+					CalcDamage(),
 					instigator,
 					HitLocation,
 					Chunkie.STM.WeaponSettings.FlakChunkMomentum * (MomentumTransfer * Velocity/speed),
@@ -32,6 +40,26 @@ function ProcessTouch (Actor Other, vector HitLocation)
 		}
 		Destroy();
 	}
+}
+
+function float CalcDamage() {
+	local float Base, Reduced;
+	local float T1, T2;
+	local float Time;
+
+	Base = Chunkie.STM.WeaponSettings.FlakChunkDamage;
+	Reduced = Base * Chunkie.STM.WeaponSettings.FlakChunkDropOffDamageRatio;
+	T1 = Chunkie.STM.WeaponSettings.FlakChunkDropOffStart;
+	T2 = Chunkie.STM.WeaponSettings.FlakChunkDropOffEnd;
+	Time = Chunkie.STM.WeaponSettings.FlakChunkLifespan - Lifespan;
+
+	if (Time <= T1)
+		return Base;
+
+	if (Time >= T2)
+		return Reduced;
+
+	return Lerp((Time - T1) / (T2 - T1), Base, Reduced);
 }
 
 
