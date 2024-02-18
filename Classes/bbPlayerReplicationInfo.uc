@@ -1,4 +1,4 @@
-class bbPlayerReplicationInfo extends PlayerReplicationInfo;
+class bbPlayerReplicationInfo extends LeagueAS_ExtPlayerReplicationInfo;
 
 var UTPure zzUTPure;
 
