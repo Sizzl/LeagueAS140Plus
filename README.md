@@ -1,3 +1,11 @@
+# LeagueAS140Plus 
+ 
+A LeagueAS140-aware fork of Deaod's InstaGib+. 
+ 
+CI and build-prerequisite artifacts are injected into mostly untouched code, allowing for easy merge of forked upstream changes. 
+ 
+Original README.md follows. 
+
 # InstaGib+
 An InstaGib focussed fork of TimTim's NewNet mutator for Unreal Tournament.
 
