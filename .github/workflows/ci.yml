@@ -26,6 +26,7 @@ jobs:
         run: 7z x "OldUnreal-UTPatch469d-Windows.zip"
 
       - name: Determine Package Name
+        shell: pwsh
         run: |
           $ref = "${{ github.ref }}"
           $repoName = "${{ github.event.repository.name }}"
@@ -58,6 +59,7 @@ jobs:
           path: ${{ env.PKG_NAME }}/
 
       - name: Rename + Update Files
+        shell: pwsh
         run: |
           function Replace-PackageName-File {
             param(
@@ -100,13 +102,133 @@ jobs:
           Replace-PackageName "/Classes/" "*.uc"
 
       - name: Extract Necessary Resources
-        run: 7z x "${{ env.PKG_NAME }}/Build/BuildEnv.zip"
+        run: 7z x "${{ env.PKG_NAME }}/Build/Build*.zip"
 
       - name: Create VersionInfo.uc
         shell: cmd
         run: |
           set BUILD_DIR=${{ env.PKG_NAME }}/
           ${{ env.PKG_NAME }}/Build/CreateVersionInfo.bat ${{ github.event.repository.name }} ${{ env.PKG_VER }} ${{ env.PKG_NAME }}
+
+      - name: LAS-Specific patches
+        if: ${{(contains(github.ref, 'las') || contains(github.event.repository.name,'LeagueAS'))}}
+        shell: pwsh
+        run: |
+          "set DEPENDENCIES=LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
+          $checkFiles = "WeaponSettings$"
+          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$"
+          $includeEHRFix = $true
+          Get-ChildItem "${{ env.PKG_NAME }}/Classes" -Filter "*.uc" | Where-Object {$_.BaseName -match $checkFiles} | ForEach-Object {
+            Get-Content $_.FullName | ? {$_ -match "bEnhancedSplashIgnoreStationaryPawns|bEnhancedSplashIgnoreTriggers"} | % { $includeEHRFix = $false }
+          }
+          if ($includeEHRFix) {
+            $patchFiles = "$($patchFiles)|$($checkFiles)"
+          }
+          Get-ChildItem "${{ env.PKG_NAME }}/Classes" -Filter "*.uc" | Where-Object {$_.BaseName -match $patchFiles} | ForEach-Object {
+            $uf = $_
+            $ui = $false
+            $uc = Get-Content $uf.FullName
+            $ux = @()
+            $ux += @($uc -split "`n" | % {
+                if ($uf.BaseName -eq "bbPlayerReplicationInfo" -and $_ -match "bbPlayerReplicationInfo\s(extends|expands)\sPlayerReplicationInfo") {
+                  "class bbPlayerReplicationInfo extends LeagueAS_ExtPlayerReplicationInfo;"
+                } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(zzbLogoDone") {
+                  " if (zzbLogoDone || zzAdvertise==0) {"
+                } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "var.*zzTrackFOV;") {
+                  $_
+                  "var int    zzAdvertise; // injected logo override"
+                } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "zzCVDelay,") {
+                  "   zzAdvertise,"
+                  $_
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "=\sSettings.TrackFOV;") {
+                  $_
+                  "     zzP.zzAdvertise = Settings.Advertise;"
+                } elseif ($uf.BaseName -eq "WeaponSettings" -and $includeEHRFix -and $_ -match "bool\s*bEnableEnhancedSplashCombo") {
+                  $_
+                  "var config bool  bEnhancedSplashIgnoreStationaryPawns;"
+                  "var config bool  bEnhancedSplashIgnoreTriggers;"
+                } elseif ($uf.BaseName -eq "ST_Mutator") {
+                    if ($_ -match "default Item name|TournamentWeapon\(A\)\.SetWeaponStay;") {
+                        $ui = $true
+                    } elseif ($ui -eq $false -and $_ -match "return\sSuper\.MutatorBroadcastLocalizedMessage") {
+                        # Still need to think of a better way of doing this
+                        "        // Let other mutators know the default Item name of replaced weapons, helps with old HUD replacement and chat mutators"
+                        "        switch (Caps(Class<Weapon>(OptionalObject).default.ItemName))"
+                        "        {"
+                        "          case `"REDEEMER`":"
+                        "            OptionalObject = class'Botpack.WarHeadLauncher';"
+                        "            break;"
+                        "          case `"SNIPER RIFLE`":"
+                        "            OptionalObject = class'Botpack.SniperRifle';"
+                        "            break;"
+                        "          case `"ROCKET LAUNCHER`":"
+                        "            OptionalObject = class'Botpack.UT_Eightball';"
+                        "            break;"
+                        "          case `"FLAK CANNON`":"
+                        "            OptionalObject = class'Botpack.UT_FlakCannon';"
+                        "            break;"
+                        "          case `"MINIGUN`":"
+                        "            OptionalObject = class'Botpack.minigun2';"
+                        "            break;"
+                        "          case `"RIPPER`":"
+                        "            OptionalObject = class'Botpack.Ripper';"
+                        "            break;"
+                        "          case `"PULSE GUN`":"
+                        "            OptionalObject = class'Botpack.PulseGun';"
+                        "            break;"
+                        "          case `"SHOCK RIFLE`":"
+                        "            OptionalObject = class'Botpack.ShockRifle';"
+                        "            break;"
+                        "          case `"GES BIO RIFLE`":"
+                        "            OptionalObject = class'Botpack.UT_Biorifle';"
+                        "            break;"
+                        "          case `"ENFORCER`":"
+                        "            OptionalObject = class'Botpack.Enforcer';"
+                        "            break;"
+                        "          case `"IMPACT HAMMER`":"
+                        "            OptionalObject = class'Botpack.ImpactHammer';"
+                        "            break;"
+                        "          case `"ENHANCED SHOCK RIFLE`":"
+                        "            OptionalObject = class'Botpack.SuperShockRifle';"
+                        "            break;"
+                        "          default:"
+                        "        }"
+                        $_
+                    } elseif ($ui -eq $false -and $_ -match "if\s\(\sOther.IsA\('Inventory'\)\s\)") {
+                        "    if (A.IsA('TournamentWeapon'))"
+                        "        TournamentWeapon(A).SetWeaponStay();"
+                        ""
+                        $_
+                    } elseif ($includeEHRFix -and $_ -match "Victim == self") {
+                        "   if (Victim != Self && ((Victim.IsA('StationaryPawn') && WeaponSettings.bEnhancedSplashIgnoreStationaryPawns) || Victim.IsA('Trigger') && WeaponSettings.bEnhancedSplashIgnoreTriggers))"
+                        "       {"
+                        "         // Revert to legacy handling"
+                        "         dir = Victim.Location - HitLocation;"
+                        "         dist = FMax(1,VSize(dir));"
+                        "         dir = dir/dist;"
+                        "         damageScale = 1 - FMax(0,(dist - Victim.CollisionRadius)/DamageRadius);"
+                        "         Victim.TakeDamage("
+                        "           damageScale * DamageAmount,"
+                        "           Source.Instigator, "
+                        "           Victim.Location - 0.5 * (Victim.CollisionHeight + Victim.CollisionRadius) * dir,"
+                        "           (damageScale * Momentum * dir),"
+                        "           DamageName"
+                        "         );"
+                        "         continue;"
+                        "       }"
+                        ""
+                        $_
+                    } else {
+                        $_
+                    }
+                } else {
+                    $_
+                }
+            })
+            $uf | Rename-Item -NewName $($uf.FullName -replace "\.uc",".uczzz") -Force -ErrorAction SilentlyContinue
+            $($ux -join "`n") | Out-File $uf.FullName -Encoding default -Force
+          }
+          exit 0
 
       - name: Build ${{ github.event.repository.name }}
         run: "${{ env.PKG_NAME }}/Build.bat silent noint nouz verbose"
@@ -118,7 +240,11 @@ jobs:
           name: ucc-output
           path: System/UCC.log
 
+      - name: Strip text
+        run: "System/ucc stripsource ../${{ env.PKG_NAME }}/System/${{ env.PKG_NAME }}.u"
+
       - name: Collect Release Files
+        shell: pwsh
         run: |
           if (Test-Path -Path "${{ env.PKG_NAME }}/System" -PathType Container)    { Copy-Item -Path "${{ env.PKG_NAME }}/System" -Destination "Release/System" -Recurse -Force -Verbose }
           if (Test-Path -Path "${{ env.PKG_NAME }}/Docs" -PathType Container)      { Copy-Item -Path "${{ env.PKG_NAME }}/Docs" -Destination "Release/Docs" -Recurse -Force -Verbose }
