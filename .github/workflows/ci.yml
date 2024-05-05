@@ -25,21 +25,21 @@ jobs:
       - name: Extract Patch
         run: 7z x "OldUnreal-UTPatch469d-Windows.zip"
 
-      - name: Determine Package Name
+      - name: Determine Package Name (updated)
         shell: pwsh
         run: |
-          $ref = "${{ github.ref }}"
-          $repoName = "${{ github.event.repository.name }}"
+          $ref = "${{ github.ref_name }}" -replace "\-|\\|\/"
+          $repoName = "${{ github.event.repository.name }}" -replace "\-UT99$"
           $sha = "${{ github.sha }}"
-          if ("${{ github.ref_type }}" -eq "tag") {
-            echo ("PKG_NAME="+$repoName+"_"+$ref.SubString(10)) >> $env:GITHUB_ENV
-            echo ("PKG_VER="+$ref.SubString(10)) >> $env:GITHUB_ENV
-          } elseif ($ref.StartsWith("refs/pull/")) {
-            echo ("PKG_NAME="+$repoName+"_pr_"+$ref.SubString(10, $ref.Length - 16)) >> $env:GITHUB_ENV
-            echo ("PKG_VER=pr_"+$ref.SubString(10, $ref.Length - 16)) >> $env:GITHUB_ENV
+          if ("${{ github.ref }}".StartsWith("refs/pull/")) {
+            Write-Output "PKG_NAME=$($repoName)_pr_$($ref)" >> $env:GITHUB_ENV
+            Write-Output "PKG_VER=pr_$($ref)" >> $env:GITHUB_ENV
+          } elseif ("${{ github.ref_type }}" -eq "tag") {
+            Write-Output "PKG_NAME=$($repoName)_$($ref)" >> $env:GITHUB_ENV
+            Write-Output "PKG_VER=$($ref)" >> $env:GITHUB_ENV
           } else {
-            echo ("PKG_NAME="+$repoName+"_"+$ref.SubString(11)+"-"+$sha.SubString(0,8)) >> $env:GITHUB_ENV
-            echo ("PKG_VER="+$ref.SubString(11)+"-"+$sha.SubString(0,8)) >> $env:GITHUB_ENV
+            Write-Output "PKG_NAME=$($repoName)_$($ref)-$($sha.SubString(0,8))" >> $env:GITHUB_ENV
+            Write-Output "PKG_VER=$($ref)-$($sha.SubString(0,8))" >> $env:GITHUB_ENV
           }
 
       - name: Save Package Name In File
@@ -58,18 +58,25 @@ jobs:
         with:
           path: ${{ env.PKG_NAME }}/
 
-      - name: Rename + Update Files
+      - name: Rename + Update Files (updated)
         shell: pwsh
         run: |
+          if ("${{vars.PKG_ORIGIN}}" -ne "") {
+            $repository = "$("/${{vars.PKG_ORIGIN}}" | Split-Path -Leaf)"
+          } else {
+            $repository = "${{ github.event.repository.name }}"
+          }
+
           function Replace-PackageName-File {
+            [CmdletBinding()]
             param(
               $File,
-              $SubDir
+              [string]$SubDir,
+              [string]$Repo="${{ github.event.repository.name }}"
             )
-
             $OldName = $File.Name
-            $NewName = ($File.Name -replace "${{ github.event.repository.name }}\.","${{ env.PKG_NAME }}.")
-            $NewItem = ("${{ env.PKG_NAME }}"+$SubDir+$NewName)
+            $NewName = ($File.Name -replace "$($Repo)\.","${{ env.PKG_NAME }}.")
+            $NewItem = "${{ env.PKG_NAME }}$($SubDir)$($NewName)"
             if ($OldName -eq $NewName) {
               Rename-Item -Path $File.FullName -NewName ($File.FullName+".bak")
               $File = (Get-Item ($File.FullName+".bak"))
@@ -78,28 +85,30 @@ jobs:
               if (Test-Path -Path $NewItem) { Remove-Item $NewItem }
             }
             (Get-Content -Path $File.FullName) | ForEach-Object {
-              ($_ -replace "${{ github.event.repository.name }}\.","${{ env.PKG_NAME }}.") >> $NewItem
+              ($_ -replace "$($Repo)\.","${{ env.PKG_NAME }}.") >> $NewItem
             }
             Remove-Item $File
           }
 
           function Replace-PackageName {
+            [CmdletBinding()]
             param(
               [string]$SubDir,
-              [string]$FilePattern
+              [string]$FilePattern,
+              [string]$Repo="${{ github.event.repository.name }}"
             )
-            if (Test-Path -Path ("${{ env.PKG_NAME }}"+$SubDir+$FilePattern)) {
-              Get-ChildItem ("${{ env.PKG_NAME }}"+$SubDir+$FilePattern) | ForEach-Object {
-                Replace-PackageName-File $_ $SubDir
+            if (Test-Path -Path "${{ env.PKG_NAME }}$($SubDir)") {
+              Get-ChildItem "${{ env.PKG_NAME }}$($SubDir)" -Filter:"$($FilePattern)" | ForEach-Object {
+                Replace-PackageName-File -File:$_ -SubDir:"$($SubDir)" -Repo:"$($Repo)" -Verbose:$VerbosePreference
               }
             }
           }
 
-          Replace-PackageName "/System/"  "${{ github.event.repository.name }}.*"
-          Replace-PackageName "/System/"  "ACEFileList-${{ github.event.repository.name }}.*"
-          Replace-PackageName "/System/"  "ACETweakList-${{ github.event.repository.name }}.*"
-          Replace-PackageName "/Classes/" "${{ github.event.repository.name }}.upkg"
-          Replace-PackageName "/Classes/" "*.uc"
+          Replace-PackageName -SubDir:"/System/"  -FilePattern:"$($repository).*" -Repo:"$($repository)" -Verbose
+          Replace-PackageName -SubDir:"/System/"  -FilePattern:"ACEFileList-$($repository).*" -Repo:"$($repository)" -Verbose
+          Replace-PackageName -SubDir:"/System/"  -FilePattern:"ACETweakList-$($repository).*" -Repo:"$($repository)" -Verbose
+          Replace-PackageName -SubDir:"/Classes/" -FilePattern:"$($repository).upkg" -Repo:"$($repository)" -Verbose
+          Replace-PackageName -SubDir:"/Classes/" -FilePattern:"*.uc" -Repo:"$($repository)" -Verbose
 
       - name: Extract Necessary Resources
         run: 7z x "${{ env.PKG_NAME }}/Build/Build*.zip"
