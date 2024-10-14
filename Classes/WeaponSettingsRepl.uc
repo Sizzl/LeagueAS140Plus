@@ -10,6 +10,7 @@ var float SniperHeadshotDamage;
 var float SniperMomentum;
 var float SniperHeadshotMomentum;
 var float SniperReloadTime;
+var bool  SniperUseReducedHitbox;
 
 var float EightballSelectTime;
 var float EightballDownTime;
@@ -69,11 +70,13 @@ var float ShockSelectTime;
 var float ShockDownTime;
 var float ShockBeamDamage;
 var float ShockBeamMomentum;
+var bool  ShockBeamUseReducedHitbox;
 var float ShockProjectileDamage;
 var float ShockProjectileHurtRadius;
 var float ShockProjectileMomentum;
 var bool  ShockProjectileBlockBullets;
 var bool  ShockProjectileTakeDamage;
+var bool  ShockProjectileCompensatePing;
 var float ShockProjectileHealth;
 var float ShockComboDamage;
 var float ShockComboMomentum;
@@ -96,6 +99,7 @@ var float EnforcerMomentum;
 var float EnforcerReloadTime;
 var float EnforcerReloadTimeAlt;
 var float EnforcerReloadTimeRepeat;
+var bool  EnforcerUseReducedHitbox;
 
 var bool  EnforcerAllowDouble;
 var float EnforcerDamageDouble;
@@ -133,6 +137,7 @@ replication {
 		SniperMomentum,
 		SniperHeadshotMomentum,
 		SniperReloadTime,
+		SniperUseReducedHitbox,
 
 		EightballSelectTime,
 		EightballDownTime,
@@ -191,11 +196,13 @@ replication {
 		ShockDownTime,
 		ShockBeamDamage,
 		ShockBeamMomentum,
+		ShockBeamUseReducedHitbox,
 		ShockProjectileDamage,
 		ShockProjectileHurtRadius,
 		ShockProjectileMomentum,
 		ShockProjectileBlockBullets,
 		ShockProjectileTakeDamage,
+		ShockProjectileCompensatePing,
 		ShockProjectileHealth,
 		ShockComboDamage,
 		ShockComboMomentum,
@@ -218,6 +225,7 @@ replication {
 		EnforcerReloadTime,
 		EnforcerReloadTimeAlt,
 		EnforcerReloadTimeRepeat,
+		EnforcerUseReducedHitbox,
 
 		EnforcerAllowDouble,
 		EnforcerDamageDouble,
@@ -453,6 +461,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	SniperMomentum = S.SniperMomentum;
 	SniperHeadshotMomentum = S.SniperHeadshotMomentum;
 	SniperReloadTime = S.SniperReloadTime;
+	SniperUseReducedHitbox = S.SniperUseReducedHitbox;
 
 	EightballSelectTime = S.EightballSelectTime;
 	EightballDownTime = S.EightballDownTime;
@@ -512,11 +521,13 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	ShockDownTime = S.ShockDownTime;
 	ShockBeamDamage = S.ShockBeamDamage;
 	ShockBeamMomentum = S.ShockBeamMomentum;
+	ShockBeamUseReducedHitbox = S.ShockBeamUseReducedHitbox;
 	ShockProjectileDamage = S.ShockProjectileDamage;
 	ShockProjectileHurtRadius = S.ShockProjectileHurtRadius;
 	ShockProjectileMomentum = S.ShockProjectileMomentum;
 	ShockProjectileBlockBullets = S.ShockProjectileBlockBullets;
 	ShockProjectileTakeDamage = S.ShockProjectileTakeDamage;
+	ShockProjectileCompensatePing = S.ShockProjectileCompensatePing;
 	ShockProjectileHealth = S.ShockProjectileHealth;
 	ShockComboDamage = S.ShockComboDamage;
 	ShockComboMomentum = S.ShockComboMomentum;
@@ -539,6 +550,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	EnforcerReloadTime = S.EnforcerReloadTime;
 	EnforcerReloadTimeAlt = S.EnforcerReloadTimeAlt;
 	EnforcerReloadTimeRepeat = S.EnforcerReloadTimeRepeat;
+	EnforcerUseReducedHitbox = S.EnforcerUseReducedHitbox;
 
 	EnforcerAllowDouble = S.EnforcerAllowDouble;
 	EnforcerDamageDouble = S.EnforcerDamageDouble;
@@ -590,7 +602,7 @@ final static function CreateWeaponSettings(
 	if (SettingsName == "")
 		SettingsName = DefaultName;
 
-	Helper = new(none, 'InstaGibPlus') class'Object';
+	Helper = new(L.XLevel, 'InstaGibPlus') class'Object';
 	WS = new(Helper, SU.StringToName(SettingsName)) class'WeaponSettings';
 	WS.SaveConfig();
 	WSR = L.Spawn(class'WeaponSettingsRepl');
@@ -614,6 +626,7 @@ defaultproperties
 	SniperMomentum=1.0
 	SniperHeadshotMomentum=1.0
 	SniperReloadTime=0.6666666666
+	SniperUseReducedHitbox=False
 
 	EightballSelectTime=0.606061
 	EightballDownTime=0.366667
@@ -673,11 +686,13 @@ defaultproperties
 	ShockDownTime=0.259259
 	ShockBeamDamage=40
 	ShockBeamMomentum=1.0
+	ShockBeamUseReducedHitbox=False
 	ShockProjectileDamage=55
 	ShockProjectileHurtRadius=70
 	ShockProjectileMomentum=1.0
-	ShockProjectileBlockBullets=False
+	ShockProjectileBlockBullets=True
 	ShockProjectileTakeDamage=False
+	ShockProjectileCompensatePing=False
 	ShockProjectileHealth=30
 	ShockComboDamage=165
 	ShockComboHurtRadius=250
@@ -700,6 +715,7 @@ defaultproperties
 	EnforcerReloadTime=0.27
 	EnforcerReloadTimeAlt=0.26
 	EnforcerReloadTimeRepeat=0.266667
+	EnforcerUseReducedHitbox=False
 
 	EnforcerAllowDouble=True
 	EnforcerDamageDouble=17

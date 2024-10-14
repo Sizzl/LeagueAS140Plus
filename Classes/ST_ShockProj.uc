@@ -1,23 +1,83 @@
 class ST_ShockProj extends ShockProj;
 
 var ST_Mutator STM;
+var WeaponSettingsRepl WSettings;
 
 // For ShockProjectileTakeDamage
 var float Health;
 
+var PlayerPawn InstigatingPlayer;
+var vector ExtrapolationDelta;
+
+simulated final function WeaponSettingsRepl FindWeaponSettings() {
+	local WeaponSettingsRepl S;
+
+	foreach AllActors(class'WeaponSettingsRepl', S)
+		return S;
+
+	return none;
+}
+
+simulated final function WeaponSettingsRepl GetWeaponSettings() {
+	if (WSettings != none)
+		return WSettings;
+
+	WSettings = FindWeaponSettings();
+	return WSettings;
+}
+
 simulated function PostBeginPlay() {
-	if (ROLE == ROLE_Authority) {
+	if (Instigator != none && Instigator.Role == ROLE_Authority) {
 		ForEach AllActors(Class'ST_Mutator', STM)
 			break; // Find master :D
-	}
-	if (STM.WeaponSettings.ShockProjectileTakeDamage) {
-		Health = STM.WeaponSettings.ShockProjectileHealth;
+
+		if (STM.WeaponSettings.ShockProjectileTakeDamage) {
+			Health = STM.WeaponSettings.ShockProjectileHealth;
+		}
 	}
 	Super.PostBeginPlay();
 }
 
+simulated function PostNetBeginPlay() {
+	local PlayerPawn In;
+	local ST_ShockRifle SR;
+
+	super.PostNetBeginPlay();
+
+	if (GetWeaponSettings().ShockProjectileCompensatePing) {
+		In = PlayerPawn(Instigator);
+		if (In != none && Viewport(In.Player) != none)
+			InstigatingPlayer = In;
+
+		if (InstigatingPlayer != none) {
+			SR = ST_ShockRifle(InstigatingPlayer.Weapon);
+			if (SR != none && SR.LocalDummy != none && SR.LocalDummy.bDeleteMe == false)
+				SR.LocalDummy.Destroy();
+		}
+	} else {
+		Disable('Tick');
+	}
+}
+
+simulated event Tick(float Delta) {
+	local vector NewXPolDelta;
+	super.Tick(Delta);
+
+	if (InstigatingPlayer == none)
+		return;
+
+	// Catch up to server
+	if (OldLocation == Location)
+		MoveSmooth(Velocity * (0.0005 * InstigatingPlayer.PlayerReplicationInfo.Ping));
+
+	// Extrapolate locally to compensate for ping
+	NewXPolDelta = (Velocity * (0.0005 * InstigatingPlayer.PlayerReplicationInfo.Ping));
+	MoveSmooth(NewXPolDelta - ExtrapolationDelta);
+	ExtrapolationDelta = NewXPolDelta;
+}
+
 function SuperExplosion() {
-	if (STM.WeaponSettings.bEnableEnhancedSplashCombo) {
+	if (STM.WeaponSettings.bEnableEnhancedSplashShockCombo) {
 		STM.EnhancedHurtRadius(
 			self,
 			STM.WeaponSettings.ShockComboDamage,
@@ -42,7 +102,7 @@ function SuperExplosion() {
 
 function Explode(vector HitLocation,vector HitNormal) {
 	PlaySound(ImpactSound, SLOT_Misc, 0.5,,, 0.5+FRand());
-	if (STM.WeaponSettings.bEnableEnhancedSplash) {
+	if (STM.WeaponSettings.bEnableEnhancedSplashShockProjectile) {
 		STM.EnhancedHurtRadius(
 			self,
 			STM.WeaponSettings.ShockProjectileDamage,

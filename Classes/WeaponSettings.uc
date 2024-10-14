@@ -14,14 +14,16 @@ var config bool bReplaceRocketLauncher;
 var config bool bReplaceSniperRifle;
 var config bool bReplaceWarheadLauncher;
 
-var config bool  bEnableEnhancedSplash;
 var config bool  bEnableEnhancedSplashBio;
-var config bool  bEnableEnhancedSplashCombo;
+var config bool  bEnableEnhancedSplashShockCombo;
+var config bool  bEnableEnhancedSplashShockProjectile;
+var config bool  bEnableEnhancedSplashRipperSecondary;
+var config bool  bEnableEnhancedSplashFlakSlug;
+var config bool  bEnableEnhancedSplashRockets;
 var config bool  bEnhancedSplashIgnoreStationaryPawns;
 var config float SplashMaxDiffraction;
 var config float SplashMinDiffractionDistance;
 
-var config bool  bEnhancedHeadshotDetection;
 var config float HeadHalfHeight;
 var config float HeadRadius;
 
@@ -35,6 +37,7 @@ var config float SniperHeadshotDamage;
 var config float SniperMomentum;
 var config float SniperHeadshotMomentum;
 var config float SniperReloadTime;
+var config bool  SniperUseReducedHitbox;
 
 var config float EightballSelectTime;
 var config float EightballDownTime;
@@ -94,11 +97,13 @@ var config float ShockSelectTime;
 var config float ShockDownTime;
 var config float ShockBeamDamage;
 var config float ShockBeamMomentum;
+var config bool  ShockBeamUseReducedHitbox;
 var config float ShockProjectileDamage;
 var config float ShockProjectileHurtRadius;
 var config float ShockProjectileMomentum;
 var config bool  ShockProjectileBlockBullets;
 var config bool  ShockProjectileTakeDamage;
+var config bool  ShockProjectileCompensatePing;
 var config float ShockProjectileHealth;
 var config float ShockComboDamage;
 var config float ShockComboMomentum;
@@ -121,6 +126,7 @@ var config float EnforcerMomentum;
 var config float EnforcerReloadTime;
 var config float EnforcerReloadTimeAlt;
 var config float EnforcerReloadTimeRepeat;
+var config bool  EnforcerUseReducedHitbox;
 
 var config bool  EnforcerAllowDouble;
 var config float EnforcerDamageDouble;
@@ -164,13 +170,15 @@ defaultproperties
 	bReplaceSniperRifle=True
 	bReplaceWarheadLauncher=True
 
-	bEnableEnhancedSplash=True
 	bEnableEnhancedSplashBio=False
-	bEnableEnhancedSplashCombo=False
+	bEnableEnhancedSplashShockCombo=False
+	bEnableEnhancedSplashShockProjectile=False
+	bEnableEnhancedSplashRipperSecondary=True
+	bEnableEnhancedSplashFlakSlug=True
+	bEnableEnhancedSplashRockets=True
 	SplashMaxDiffraction=0.5
 	SplashMinDiffractionDistance=50.0
 
-	bEnhancedHeadshotDetection=False
 	HeadHalfHeight=7.5
 	HeadRadius=10.0
 
@@ -184,6 +192,7 @@ defaultproperties
 	SniperMomentum=1.0
 	SniperHeadshotMomentum=1.0
 	SniperReloadTime=0.6666666666
+	SniperUseReducedHitbox=False
 
 	EightballSelectTime=0.606061
 	EightballDownTime=0.366667
@@ -243,11 +252,13 @@ defaultproperties
 	ShockDownTime=0.259259
 	ShockBeamDamage=40
 	ShockBeamMomentum=1.0
+	ShockBeamUseReducedHitbox=False
 	ShockProjectileDamage=55
 	ShockProjectileHurtRadius=70
 	ShockProjectileMomentum=1.0
 	ShockProjectileBlockBullets=True
 	ShockProjectileTakeDamage=False
+	ShockProjectileCompensatePing=False
 	ShockProjectileHealth=30
 	ShockComboDamage=165
 	ShockComboHurtRadius=250
@@ -270,6 +281,7 @@ defaultproperties
 	EnforcerReloadTime=0.27
 	EnforcerReloadTimeAlt=0.26
 	EnforcerReloadTimeRepeat=0.266667
+	EnforcerUseReducedHitbox=False
 
 	EnforcerAllowDouble=True
 	EnforcerDamageDouble=17

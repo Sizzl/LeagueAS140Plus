@@ -7,8 +7,9 @@
 class ST_ShockRifle extends ShockRifle;
 
 var ST_Mutator STM;
-
 var WeaponSettingsRepl WSettings;
+
+var ST_ShockProj LocalDummy;
 
 simulated final function WeaponSettingsRepl FindWeaponSettings() {
 	local WeaponSettingsRepl S;
@@ -33,6 +34,39 @@ function PostBeginPlay()
 
 	ForEach AllActors(Class'ST_Mutator', STM)
 		break;		// Find master :D
+}
+
+function TraceFire(float Accuracy) {
+	local vector HitLocation, HitNormal, StartTrace, EndTrace, X,Y,Z;
+	local actor Other;
+	local Pawn PawnOwner;
+
+	PawnOwner = Pawn(Owner);
+
+	Owner.MakeNoise(PawnOwner.SoundDampening);
+	GetAxes(PawnOwner.ViewRotation,X,Y,Z);
+	StartTrace = Owner.Location + CalcDrawOffset() + FireOffset.Y * Y + FireOffset.Z * Z; 
+	EndTrace = StartTrace + (Accuracy * (FRand() - 0.5 )* Y * 1000) + (Accuracy * (FRand() - 0.5 ) * Z * 1000);
+
+	if (bBotSpecialMove && (Tracked != None) && (
+			((Owner.Acceleration == vect(0,0,0)) && (VSize(Owner.Velocity) < 40)) ||
+			(Normal(Owner.Velocity) Dot Normal(Tracked.Velocity) > 0.95)
+		)
+	) {
+		EndTrace += 10000 * Normal(Tracked.Location - StartTrace);
+	} else {
+		AdjustedAim = PawnOwner.AdjustAim(1000000, StartTrace, 2.75*AimError, False, False);	
+		EndTrace += (10000 * vector(AdjustedAim)); 
+	}
+
+	Tracked = None;
+	bBotSpecialMove = false;
+
+	if (STM.WeaponSettings.ShockBeamUseReducedHitbox)
+		Other = STM.TraceShot(HitLocation, HitNormal, EndTrace, StartTrace, PawnOwner);
+	else
+		Other = PawnOwner.TraceShot(HitLocation,HitNormal,EndTrace,StartTrace);
+	ProcessTraceHit(Other, HitLocation, HitNormal, vector(AdjustedAim),Y,Z);
 }
 
 function ProcessTraceHit(Actor Other, Vector HitLocation, Vector HitNormal, Vector X, Vector Y, Vector Z)
@@ -136,6 +170,61 @@ state ClientFiring {
 	simulated function bool ClientAltFire(float Value) {
 		return false;
 	}
+}
+
+state ClientAltFiring {
+	simulated function BeginState() {
+		local Pawn PawnOwner;
+		local vector X, Y, Z;
+		local vector Start;
+		local float Hand;
+
+		if (GetWeaponSettings().ShockProjectileCompensatePing == false)
+			return;
+
+		PawnOwner = Pawn(Owner);
+
+		if (Owner.IsA('PlayerPawn'))
+			Hand = FClamp(PlayerPawn(Owner).Handedness, -1.0, 1.0);
+		else
+			Hand = 1.0;
+
+		GetAxes(PawnOwner.ViewRotation,X,Y,Z);
+		if (bHideWeapon)
+			Start = Owner.Location + CalcDrawOffsetClient() + FireOffset.X * X + FireOffset.Z * Z;
+		else
+			Start = Owner.Location + CalcDrawOffsetClient() + FireOffset.X * X + FireOffset.Y * Hand * Y + FireOffset.Z * Z;
+		LocalDummy = ST_ShockProj(Spawn(AltProjectileClass,,, Start,PawnOwner.ViewRotation));
+		LocalDummy.RemoteRole = ROLE_None;
+		LocalDummy.LifeSpan = PawnOwner.PlayerReplicationInfo.Ping * 0.00125;
+		LocalDummy.bCollideWorld = false;
+		LocalDummy.SetCollision(false, false, false);
+	}
+}
+
+// compatibility between client and server logic
+simulated function vector CalcDrawOffsetClient() {
+	local vector DrawOffset;
+	local Pawn PawnOwner;
+	local vector WeaponBob;
+
+	DrawOffset = CalcDrawOffset();
+
+	if (Level.NetMode != NM_Client)
+		return DrawOffset;
+
+	PawnOwner = Pawn(Owner);
+
+	// correct for EyeHeight differences between server and client
+	DrawOffset -= (PawnOwner.EyeHeight * vect(0,0,1));
+	DrawOffset += (PawnOwner.BaseEyeHeight * vect(0,0,1));
+
+	// remove WeaponBob, not applied on server
+	WeaponBob = BobDamping * PawnOwner.WalkBob;
+    WeaponBob.Z = (0.45 + 0.55 * BobDamping) * PawnOwner.WalkBob.Z;
+    DrawOffset -= WeaponBob;
+
+	return DrawOffset;
 }
 
 defaultproperties {
