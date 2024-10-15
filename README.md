@@ -991,6 +991,7 @@ Server settings can be found inside InstaGibPlus.ini.
 1. [bEnableCarcassCollision](#benablecarcasscollision)
 1. [ShowTouchedPackage](#showtouchedpackage)
 1. [ExcludeMapsForKickers](#excludemapsforkickers)
+1. [HitFeedbackMode](#hitfeedbackmode)
 1. [ForcedSettings](#forcedsettings)
 
 ## HeadshotDamage
@@ -1237,6 +1238,17 @@ Config list of supported player packs
 
 ## bForceDefaultHitSounds
 **Reserved**
+
+## HitFeedbackMode
+
+**Type: EHitFeedbackMode**  
+**Default: HFM_Always**  
+
+Determines how server-side hit feedback is handled.
+
+* `HFM_Disabled`: No feedback to clients
+* `HFM_VisibleOnly`: Feedback only if client can see the victim
+* `HFM_Always`: Feedback always provided
 
 ## TeleRadius
 
