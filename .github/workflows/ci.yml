@@ -141,11 +141,28 @@ jobs:
             $ux += @($uc -split "`n" | % {
                 if ($uf.BaseName -eq "bbPlayerReplicationInfo" -and $_ -match "bbPlayerReplicationInfo\s(extends|expands)\sPlayerReplicationInfo") {
                   "class bbPlayerReplicationInfo extends LeagueAS_ExtPlayerReplicationInfo;"
+                } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "bIs469Client\s=\sint") {
+                  $_
+                  if ($uc -notmatch "bHas469LocationOffsetFix") {
+                    "   if (int(Level.EngineVersion) > 469) {"
+                    "     bHas469LocationOffsetFix = True;"
+                    "   }"
+                    "   else if (int(Level.EngineVersion) == 469) {"
+                    "     if (Len(Level.GetPropertyText(`"EngineRevision`")) > 0 && Left(Level.GetPropertyText(`"EngineRevision`"),1) != `"a`" && Left(Level.GetPropertyText(`"EngineRevision`"),1) != `"b`") {"
+                    "       bHas469LocationOffsetFix = True;"
+                    "     }"
+                    "   }"
+                  }
+                } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(Settings.bEnableLocationOffsetFix\s==\sfalse\)" -and $uc -notmatch "bHas469LocationOffsetFix") {
+                  " if (Settings.bEnableLocationOffsetFix == false || bHas469LocationOffsetFix)"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(zzbLogoDone") {
                   " if (zzbLogoDone || zzAdvertise==0) {"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "var.*zzTrackFOV;") {
                   $_
                   "var int    zzAdvertise; // injected logo override"
+                  if ($uc -notmatch "bHas469LocationOffsetFix") {
+                    "var bool   bHas469LocationOffsetFix; // detect 469c or above"
+                  }
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "zzCVDelay,") {
                   "   zzAdvertise,"
                   $_
