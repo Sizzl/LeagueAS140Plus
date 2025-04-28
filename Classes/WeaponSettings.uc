@@ -58,6 +58,7 @@ var config float FlakChunkLifespan;
 var config float FlakChunkDropOffStart;
 var config float FlakChunkDropOffEnd;
 var config float FlakChunkDropOffDamageRatio;
+var config bool  FlakChunkRandomSpread;
 var config float FlakSlugDamage;
 var config float FlakSlugHurtRadius;
 var config float FlakSlugMomentum;
@@ -102,6 +103,8 @@ var config float ShockProjectileDamage;
 var config float ShockProjectileHurtRadius;
 var config float ShockProjectileMomentum;
 var config bool  ShockProjectileBlockBullets;
+var config bool  ShockProjectileBlockFlakChunk;
+var config bool  ShockProjectileBlockFlakSlug;
 var config bool  ShockProjectileTakeDamage;
 var config bool  ShockProjectileCompensatePing;
 var config float ShockProjectileHealth;
@@ -153,6 +156,8 @@ var config float TranslocatorDownTime;
 var config float TranslocatorHealth;
 
 var config string DefaultWeaponClass;
+
+var config int   InvisibilityDuration;
 
 defaultproperties
 {
@@ -213,6 +218,7 @@ defaultproperties
 	FlakChunkDropOffStart=0.0
 	FlakChunkDropOffEnd=0.0
 	FlakChunkDropOffDamageRatio=1.0
+	FlakChunkRandomSpread=True
 	FlakSlugDamage=70
 	FlakSlugHurtRadius=150
 	FlakSlugMomentum=1.0
@@ -257,6 +263,8 @@ defaultproperties
 	ShockProjectileHurtRadius=70
 	ShockProjectileMomentum=1.0
 	ShockProjectileBlockBullets=True
+	ShockProjectileBlockFlakChunk=True
+	ShockProjectileBlockFlakSlug=True
 	ShockProjectileTakeDamage=False
 	ShockProjectileCompensatePing=False
 	ShockProjectileHealth=30
@@ -308,4 +316,6 @@ defaultproperties
 	TranslocatorHealth=65.0
 
 	DefaultWeaponClass=""
+
+	InvisibilityDuration=45
 }

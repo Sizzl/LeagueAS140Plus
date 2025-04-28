@@ -1,5 +1,8 @@
 class WeaponSettingsRepl extends Actor;
 
+var float HeadHalfHeight;
+var float HeadRadius;
+
 var float WarheadSelectTime;
 var float WarheadDownTime;
 
@@ -31,6 +34,7 @@ var float FlakChunkLifespan;
 var float FlakChunkDropOffStart;
 var float FlakChunkDropOffEnd;
 var float FlakChunkDropOffDamageRatio;
+var bool  FlakChunkRandomSpread;
 var float FlakSlugDamage;
 var float FlakSlugHurtRadius;
 var float FlakSlugMomentum;
@@ -75,6 +79,8 @@ var float ShockProjectileDamage;
 var float ShockProjectileHurtRadius;
 var float ShockProjectileMomentum;
 var bool  ShockProjectileBlockBullets;
+var bool  ShockProjectileBlockFlakChunk;
+var bool  ShockProjectileBlockFlakSlug;
 var bool  ShockProjectileTakeDamage;
 var bool  ShockProjectileCompensatePing;
 var float ShockProjectileHealth;
@@ -125,8 +131,13 @@ var float TranslocatorOutSelectTime;
 var float TranslocatorDownTime;
 var float TranslocatorHealth;
 
+var int   InvisibilityDuration;
+
 replication {
 	reliable if (Role == ROLE_Authority)
+		HeadHalfHeight,
+		HeadRadius,
+		
 		WarheadSelectTime,
 		WarheadDownTime,
 
@@ -157,6 +168,7 @@ replication {
 		FlakChunkDropOffStart,
 		FlakChunkDropOffEnd,
 		FlakChunkDropOffDamageRatio,
+		FlakChunkRandomSpread,
 		FlakSlugDamage,
 		FlakSlugHurtRadius,
 		FlakSlugMomentum,
@@ -201,6 +213,8 @@ replication {
 		ShockProjectileHurtRadius,
 		ShockProjectileMomentum,
 		ShockProjectileBlockBullets,
+		ShockProjectileBlockFlakChunk,
+		ShockProjectileBlockFlakSlug,
 		ShockProjectileTakeDamage,
 		ShockProjectileCompensatePing,
 		ShockProjectileHealth,
@@ -249,7 +263,9 @@ replication {
 		TranslocatorSelectTime,
 		TranslocatorOutSelectTime,
 		TranslocatorDownTime,
-		TranslocatorHealth;
+		TranslocatorHealth,
+
+		InvisibilityDuration;
 }
 
 simulated final function float WarheadSelectAnimSpeed() {
@@ -451,6 +467,9 @@ simulated final function float TranslocatorDownAnimSpeed() {
 }
 
 function InitFromWeaponSettings(WeaponSettings S) {
+	HeadHalfHeight = S.HeadHalfHeight;
+	HeadRadius = S.HeadRadius;
+
 	WarheadSelectTime = S.WarheadSelectTime;
 	WarheadDownTime = S.WarheadDownTime;
 
@@ -482,6 +501,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	FlakChunkDropOffStart = S.FlakChunkDropOffStart;
 	FlakChunkDropOffEnd = S.FlakChunkDropOffEnd;
 	FlakChunkDropOffDamageRatio = S.FlakChunkDropOffDamageRatio;
+	FlakChunkRandomSpread = S.FlakChunkRandomSpread;
 	FlakSlugDamage = S.FlakSlugDamage;
 	FlakSlugHurtRadius = S.FlakSlugHurtRadius;
 	FlakSlugMomentum = S.FlakSlugMomentum;
@@ -526,6 +546,9 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	ShockProjectileHurtRadius = S.ShockProjectileHurtRadius;
 	ShockProjectileMomentum = S.ShockProjectileMomentum;
 	ShockProjectileBlockBullets = S.ShockProjectileBlockBullets;
+	ShockProjectileBlockFlakChunk = S.ShockProjectileBlockFlakChunk;
+	ShockProjectileBlockFlakSlug = S.ShockProjectileBlockFlakSlug;
+	
 	ShockProjectileTakeDamage = S.ShockProjectileTakeDamage;
 	ShockProjectileCompensatePing = S.ShockProjectileCompensatePing;
 	ShockProjectileHealth = S.ShockProjectileHealth;
@@ -575,38 +598,8 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	TranslocatorOutSelectTime = S.TranslocatorOutSelectTime;
 	TranslocatorDownTime = S.TranslocatorDownTime;
 	TranslocatorHealth = S.TranslocatorHealth;
-}
 
-final static function CreateWeaponSettings(
-	LevelInfo L,
-	string DefaultName,
-	out WeaponSettings WS,
-	out WeaponSettingsRepl WSR
-) {
-	local Object Helper;
-	local string Options;
-	local int Pos;
-	local string SettingsName;
-	local StringUtils SU;
-
-	Options = L.GetLocalURL();
-	Pos = InStr(Options, "?");
-	if (Pos < 0)
-		Options = "";
-	else
-		Options = Mid(Options, Pos);
-
-	SU = class'StringUtils'.static.Instance();
-
-	SettingsName = L.Game.ParseOption(Options, "IGPlusWeaponSettings");
-	if (SettingsName == "")
-		SettingsName = DefaultName;
-
-	Helper = new(L.XLevel, 'InstaGibPlus') class'Object';
-	WS = new(Helper, SU.StringToName(SettingsName)) class'WeaponSettings';
-	WS.SaveConfig();
-	WSR = L.Spawn(class'WeaponSettingsRepl');
-	WSR.InitFromWeaponSettings(WS);
+	InvisibilityDuration = S.InvisibilityDuration;
 }
 
 defaultproperties
@@ -615,6 +608,9 @@ defaultproperties
 	bHidden=True
 	bAlwaysRelevant=True
 	DrawType=DT_None
+
+	HeadHalfHeight=7.5
+	HeadRadius=10.0
 
 	WarheadSelectTime=0.5
 	WarheadDownTime=0.233333
@@ -647,6 +643,7 @@ defaultproperties
 	FlakChunkDropOffStart=0.0
 	FlakChunkDropOffEnd=0.0
 	FlakChunkDropOffDamageRatio=1.0
+	FlakChunkRandomSpread=True
 	FlakSlugDamage=70
 	FlakSlugHurtRadius=150
 	FlakSlugMomentum=1.0
@@ -691,6 +688,8 @@ defaultproperties
 	ShockProjectileHurtRadius=70
 	ShockProjectileMomentum=1.0
 	ShockProjectileBlockBullets=True
+	ShockProjectileBlockFlakChunk=True
+	ShockProjectileBlockFlakSlug=True
 	ShockProjectileTakeDamage=False
 	ShockProjectileCompensatePing=False
 	ShockProjectileHealth=30
@@ -740,4 +739,6 @@ defaultproperties
 	TranslocatorOutSelectTime=0.27
 	TranslocatorDownTime=0.212121
 	TranslocatorHealth=65.0
+
+	InvisibilityDuration=45
 }

@@ -84,6 +84,7 @@ var Weapon zzPendingWeapon;
 var float LastCAPTime; // ServerTime when last CAP was sent
 var float NextRealCAPTime;
 var decoration carriedFlag;
+var WeaponSettingsRepl WSettings;
 
 // HUD stuff
 var Mutator	zzHudMutes[50];		// Accepted Hud Mutators
@@ -180,6 +181,7 @@ var vector TlocPrevLocation;
 var bool IGPlus_DidTranslocate;
 var bool IGPlus_NotifiedTranslocate;
 var bool IGPlus_WantCAP;
+var bool IGPlus_SkipMovesUntilNextTick;
 
 // SSR Beam
 var float LastWeaponEffectCreated;
@@ -212,7 +214,8 @@ var bool bPressedDodge;
 var transient float LastTimeForward, LastTimeBack, LastTimeLeft, LastTimeRight;
 var transient float TurnFractionalPart, LookUpFractionalPart;
 var float DuckFraction; // 0 = Not Ducking, 1 = Ducking
-var float DuckTransitionTime; // Time to go from ducking to not-ducking
+const DuckStartTransitionTime = 0.25;// Time to go from non-ducking to ducking
+const DuckEndTransitionTime = 0.1; // Time to go from ducking to not-ducking
 var byte DuckFractionRepl; // Replicated to all players
 
 var float AverageServerDeltaTime;
@@ -718,6 +721,23 @@ simulated function bool xxNewSetLocation(vector NewLoc, vector NewVel)
 simulated function bool xxNewMoveSmooth(vector NewLoc)
 {
 	return MoveSmooth(NewLoc - Location);
+}
+
+simulated final function WeaponSettingsRepl FindWeaponSettings() {
+	local WeaponSettingsRepl S;
+
+	foreach AllActors(class'WeaponSettingsRepl', S)
+		return S;
+
+	return none;
+}
+
+simulated final function WeaponSettingsRepl GetWeaponSettings() {
+	if (WSettings != none)
+		return WSettings;
+
+	WSettings = FindWeaponSettings();
+	return WSettings;
 }
 
 simulated function xxClientKicker(
@@ -2352,6 +2372,8 @@ function IGPlus_ProcessRemoteMovement() {
 	else
 		IGPlus_CheckClientError();
 
+	IGPlus_SkipMovesUntilNextTick = false;
+
 	if (((ServerTimeStamp - LastCAPTime) / Level.TimeDilation) > FakeCAPInterval && ServerTimeStamp >= NextRealCAPTime) {
 		xxFakeCAP(CurrentTimeStamp);
 		LastCAPTime = ServerTimeStamp;
@@ -2501,23 +2523,31 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 	else
 		ClientLocAbs = SM.ClientLocation + SM.ClientBase.Location;
 
-	if (bWasPaused == false)
+	if (ServerTimeStamp == 0.0) {
+		ServerDeltaTime = SM.MoveDeltaTime;
+	} else {
+		ServerDeltaTime = Level.TimeSeconds - ServerTimeStamp;
+		if (Level.Pauser == "" && bWasPaused)
+			ServerDeltaTime = FMin(ServerDeltaTime, SM.MoveDeltaTime);
+	}
+
+	if (zzUTPure.Settings.bEnableWarpFix && ServerDeltaTime > zzUTPure.Settings.WarpFixDelay) {
+		IGPlus_SkipMovesUntilNextTick = true;
+	}
+
+	if (bWasPaused == false && IGPlus_SkipMovesUntilNextTick == false) {
 		if (IGPlus_OldServerMove(SM.TimeStamp, SM.OldMoveData1, SM.OldMoveData2)) {
 			xxFakeCAP(CurrentTimeStamp);
 			LastCAPTime = Level.TimeSeconds;
 		}
+	}
 
 	if (ServerTimeStamp == 0.0) {
-		ServerDeltaTime = SM.MoveDeltaTime;
 		DeltaTime = SM.MoveDeltaTime;
 	} else {
-		ServerDeltaTime = Level.TimeSeconds - ServerTimeStamp;
 		DeltaTime = SM.TimeStamp - CurrentTimeStamp;
-
-		if (Level.Pauser == "" && bWasPaused) {
-			ServerDeltaTime = FMin(ServerDeltaTime, SM.MoveDeltaTime);
+		if (Level.Pauser == "" && bWasPaused)
 			DeltaTime = FMin(DeltaTime, SM.MoveDeltaTime);
-		}
 	}
 
 	ExtrapolationDelta += (ServerDeltaTime - DeltaTime);
@@ -2598,9 +2628,7 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 	LastAddVelocityAppliedIndex = AddVelocityId;
 
 	// Predict new position
-	if ((Level.Pauser == "") && (DeltaTime > 0) &&
-		(zzUTPure.Settings.bEnableWarpFix == false || DeltaTime <= zzUTPure.Settings.WarpFixDelay)
-	) {
+	if ((Level.Pauser == "") && (DeltaTime > 0) && (IGPlus_SkipMovesUntilNextTick == false)) {
 		if (zzUTPure.Settings.bEnableJitterBounding && DeltaTime > zzUTPure.Settings.MaxJitterTime) {
 			SimTime = DeltaTime - zzUTPure.Settings.MaxJitterTime;
 			if (SimTime >= 0.005 || bIs469Server) {
@@ -2807,7 +2835,11 @@ function bool IGPlus_IsCAPNecessary() {
 		zzIgnoreUpdateUntil = ServerTimeStamp;
 	}
 
-	bForceUpdate = zzbForceUpdate || ClientTlocCounter != TlocCounter || (zzForceUpdateUntil >= ServerTimeStamp);
+	bForceUpdate = 
+		zzbForceUpdate ||
+		IGPlus_SkipMovesUntilNextTick ||
+		ClientTlocCounter != TlocCounter ||
+		zzForceUpdateUntil >= ServerTimeStamp;
 
 	clientLastUpdateTime = ServerTimeStamp;
 	debugClientForceUpdate = bForceUpdate;
@@ -3483,17 +3515,17 @@ simulated function actor NN_TraceShot(out vector HitLocation, out vector HitNorm
 function Actor TraceShot(out vector HitLocation, out vector HitNormal, vector EndTrace, vector StartTrace)
 {
 	local Actor A, Other;
-	local ST_Mutator STM;
 	local bool bSProjBlocks;
 	local bool bWeaponShock;
+	local WeaponSettingsRepl WS;
 
-	STM = zzUTPure.GetStatTrack();
+	WS = GetWeaponSettings();
 	bSProjBlocks = true;
-	if (STM != none)
-		bSProjBlocks = STM.WeaponSettings.ShockProjectileBlockBullets;
+	if (WS != none)
+		bSProjBlocks = GetWeaponSettings().ShockProjectileBlockBullets;
 	bWeaponShock = (Weapon != none && Weapon.IsA('ShockRifle'));
 	
-	foreach TraceActors( class'Actor', A, HitLocation, HitNormal, EndTrace, StartTrace) {
+	foreach TraceActors(class'Actor', A, HitLocation, HitNormal, EndTrace, StartTrace) {
 		if (Pawn(A) != none) {
 			if ((A != self) && Pawn(A).AdjustHitLocation(HitLocation, EndTrace - StartTrace))
 				Other = A;
@@ -3899,7 +3931,7 @@ function PlayBackInput(IGPlus_SavedInput Old, IGPlus_SavedInput I) {
 
 		if (I.bWalk) bRun = 1; else bRun = 0;
 		if (I.bDuck) bDuck = 1; else bDuck = 0;
-		
+
 		bPressedJump = I.bJump && (I.bJump != Old.bJump);
 		bPressedDodge = I.bDodg && (I.bDodg != Old.bDodg);
 	}
@@ -4852,6 +4884,13 @@ simulated function bool AdjustHitLocation(out vector HitLocation, vector TraceDi
 {
 	local float adjZ, maxZ;
 
+	// This rejects shots where theres geometry going through the collision
+	// cylinder. This is possible in networked play where Location is rounded to
+	// the nearest Integer for each axis, if rubbing up against really thin
+	// walls.
+	if (FastTrace(Location, HitLocation) == false)
+		return false;
+
 	TraceDir = Normal(TraceDir);
 	HitLocation = HitLocation + 0.5 * CollisionRadius * TraceDir;
 
@@ -4880,6 +4919,13 @@ simulated function bool ClientAdjustHitLocation(out vector HitLocation, vector T
 {
 	local float adjZ, maxZ;
 	local vector delta;
+
+	// This rejects shots where theres geometry going through the collision
+	// cylinder. This is possible in networked play where Location is rounded to
+	// the nearest Integer for each axis, if rubbing up against really thin
+	// walls.
+	if (FastTrace(Location, HitLocation) == false)
+		return false;
 
 	if (Role != ROLE_Authority)
 		maxZ = Location.Z + (1.0 - 0.7 * DuckFractionRepl/255.0) * CollisionHeight;
@@ -5457,9 +5503,9 @@ event ServerTick(float DeltaTime) {
 	}
 
 	if (bIsCrouching) {
-		DuckFraction = FClamp(DuckFraction + DeltaTime/DuckTransitionTime, 0.0, 1.0);
+		DuckFraction = FClamp(DuckFraction + DeltaTime/DuckStartTransitionTime, 0.0, 1.0);
 	} else {
-		DuckFraction = FClamp(DuckFraction - DeltaTime/DuckTransitionTime, 0.0, 1.0);
+		DuckFraction = FClamp(DuckFraction - DeltaTime/DuckEndTransitionTime, 0.0, 1.0);
 	}
 	DuckFractionRepl = byte(DuckFraction * 255.0);
 
@@ -7389,6 +7435,8 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	local vector VelXpol;
 	local float CosAlpha;
 	local float SinAlpha;
+	local vector LocDelta;
+	local vector MaxMove;
 
 	if (IGPlus_LocationOffsetFix_Moved == false)
 		return;
@@ -7399,6 +7447,10 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	}
 
 	bReplicatedVelocity = IGPlus_LocationOffsetFix_WasVelocityReplicated();
+
+	LocDelta = Location - IGPlus_LocationOffsetFix_SafeLocation;
+	MaxMove = 2.0*DeltaTime*Velocity;
+
 	if (bReplicatedVelocity == false) {
 		Velocity = IGPlus_LocationOffsetFix_Velocity;
 
@@ -7407,7 +7459,7 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	}
 
 	// detect whether server replicated new location
-	if (VSize(Location - IGPlus_LocationOffsetFix_SafeLocation) > VSize(2*DeltaTime*Velocity)+MaxStepHeight) {
+	if (VSize(LocDelta) > VSize(MaxMove) + MaxStepHeight) {
 		IGPlus_LocationOffsetFix_PredictionOffset = IGPlus_LocationOffsetFix_OldLocation - Location - IGPlus_LocationOffsetFix_ExtrapolationOffset;
 		IGPlus_LocationOffsetFix_OldLocation = Location;
 		IGPlus_LocationOffsetFix_ServerLocation = Location;
@@ -7757,7 +7809,6 @@ event PostRender( canvas zzCanvas )
 
 	// Render our UTPure Logo
 	xxRenderLogo(zzCanvas);
-	xxCleanAvars();
 
 	IGPlus_FixNetspeed();
 
@@ -8956,14 +9007,6 @@ function Typing( bool bTyping )
 // Tracebot stopper: By DB
 ////////////////////////////
 
-function xxCleanAvars()
-{
-	aMouseX = 0.0;
-	aMouseY = 0.0;
-	aTurn = 0.0;
-	aUp = 0.0;
-}
-
 simulated function xxGetDemoPlaybackSpec()
 {
 	local Pawn P;
@@ -9283,6 +9326,8 @@ function PlayInAir() {
 
 	if (Level.NetMode != NM_DedicatedServer && Settings.bReduceEyeHeightInAir)
 		BaseEyeHeight = 0.7 * default.BaseEyeHeight;
+	else
+		BaseEyeHeight = default.BaseEyeHeight;
 
 	if ( (GetAnimGroup(AnimSequence) == 'Landing') && !bLastJumpAlt )
 	{
@@ -9531,7 +9576,6 @@ defaultproperties
 	SecondaryDodgeSpeedZ=180
 	DodgeEndVelocity=0.1
 	JumpEndVelocity=1.0
-	DuckTransitionTime=0.25
 	LastWeaponEffectCreated=-1
 	RespawnDelay=1.0
 	NetUpdateFrequency=200

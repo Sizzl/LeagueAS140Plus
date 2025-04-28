@@ -6,20 +6,10 @@
 
 class ST_UT_SeekingRocket extends UT_SeekingRocket;
 
-var ST_Mutator STM;
-var bool bDirect;
+var IGPlus_WeaponImplementation WImp;
 
 auto state Flying
 {
-	function ProcessTouch (Actor Other, Vector HitLocation)
-	{
-		if ( (Other != instigator) && !Other.IsA('Projectile') ) 
-		{
-			bDirect = Other.IsA('Pawn');
-			Explode(HitLocation,Normal(HitLocation-Other.Location));
-		}
-	}
-
 	function HitWall (vector HitNormal, actor Wall)
 	{
 		if ( (Mover(Wall) != None) && Mover(Wall).bDamageTriggered )
@@ -51,20 +41,20 @@ auto state Flying
 
 	function BlowUp(vector HitLocation)
 	{
-		if (STM.WeaponSettings.bEnableEnhancedSplashRockets) {
-			STM.EnhancedHurtRadius(
+		if (WImp.WeaponSettings.bEnableEnhancedSplashRockets) {
+			WImp.EnhancedHurtRadius(
 				self,
-				STM.WeaponSettings.RocketDamage,
-				STM.WeaponSettings.RocketHurtRadius,
+				WImp.WeaponSettings.RocketDamage,
+				WImp.WeaponSettings.RocketHurtRadius,
 				MyDamageType,
-				STM.WeaponSettings.RocketMomentum * MomentumTransfer,
+				WImp.WeaponSettings.RocketMomentum * MomentumTransfer,
 				HitLocation);
 		} else {
 			HurtRadius(
-				STM.WeaponSettings.RocketDamage,
-				STM.WeaponSettings.RocketHurtRadius,
+				WImp.WeaponSettings.RocketDamage,
+				WImp.WeaponSettings.RocketHurtRadius,
 				MyDamageType,
-				STM.WeaponSettings.RocketMomentum * MomentumTransfer,
+				WImp.WeaponSettings.RocketMomentum * MomentumTransfer,
 				HitLocation);
 		}
 

@@ -6,7 +6,7 @@
 
 class ST_SniperRifle extends SniperRifle;
 
-var ST_Mutator STM;
+var IGPlus_WeaponImplementation WImp;
 
 enum EZoomState {
 	ZS_None,
@@ -39,7 +39,7 @@ function PostBeginPlay()
 {
 	Super.PostBeginPlay();
 
-	ForEach AllActors(Class'ST_Mutator', STM)
+	ForEach AllActors(Class'IGPlus_WeaponImplementation', WImp)
 		break;		// Find master :D
 }
 
@@ -56,8 +56,8 @@ function TraceFire(float Accuracy) {
 	AdjustedAim = PawnOwner.AdjustAim(1000000, StartTrace, 2*AimError, False, False);	
 	X = vector(AdjustedAim);
 	EndTrace = StartTrace + 100000 * X;
-	if (STM.WeaponSettings.SniperUseReducedHitbox)
-		Other = STM.TraceShot(HitLocation, HitNormal, EndTrace, StartTrace, PawnOwner);
+	if (WImp.WeaponSettings.SniperUseReducedHitbox)
+		Other = WImp.TraceShot(HitLocation, HitNormal, EndTrace, StartTrace, PawnOwner);
 	else
 		Other = PawnOwner.TraceShot(HitLocation, HitNormal, EndTrace, StartTrace);
 	ProcessTraceHit(Other, HitLocation, HitNormal, X,Y,Z);
@@ -80,20 +80,23 @@ function ProcessTraceHit(Actor Other, Vector HitLocation, Vector HitNormal, Vect
 	if (Other == Level) {
 		Spawn(class'UT_HeavyWallHitEffect',,, HitLocation+HitNormal, Rotator(HitNormal));
 	} else if ((Other != self) && (Other != Owner) && (Other != None)) {
+		if (Other.IsA('Mover'))
+			Spawn(class'UT_HeavyWallHitEffect',,, HitLocation+HitNormal, Rotator(HitNormal));
+
 		if (Other.bIsPawn && CheckHeadShot(Pawn(Other), HitLocation, X) &&
 			(instigator.IsA('PlayerPawn') || (instigator.IsA('Bot') && !Bot(Instigator).bNovice))
 		) {
 			Other.PlaySound(Sound 'ChunkHit',, 4.0,,100);
 			Other.TakeDamage(
-				STM.WeaponSettings.SniperHeadshotDamage,
+				WImp.WeaponSettings.SniperHeadshotDamage,
 				PawnOwner,
 				HitLocation,
-				STM.WeaponSettings.SniperHeadshotMomentum * 35000 * X,
+				WImp.WeaponSettings.SniperHeadshotMomentum * 35000 * X,
 				AltDamageType);
 		} else {
 			if (Other.bIsPawn) {
 				Other.PlaySound(Sound 'ChunkHit',, 4.0,,100);
-				Momentum = STM.WeaponSettings.SniperMomentum * 30000.0*X;
+				Momentum = WImp.WeaponSettings.SniperMomentum * 30000.0*X;
 			} else {
 				Momentum = 30000.0*X;
 				if (Other.IsA('Carcass') == false)
@@ -101,7 +104,7 @@ function ProcessTraceHit(Actor Other, Vector HitLocation, Vector HitNormal, Vect
 			}
 
 			Other.TakeDamage(
-				STM.WeaponSettings.SniperDamage,
+				WImp.WeaponSettings.SniperDamage,
 				PawnOwner,
 				HitLocation,
 				Momentum,
@@ -111,10 +114,10 @@ function ProcessTraceHit(Actor Other, Vector HitLocation, Vector HitNormal, Vect
 }
 
 function bool CheckHeadShot(Pawn P, vector HitLocation, vector BulletDir) {
-	if (STM.WeaponSettings.SniperUseReducedHitbox == false)
+	if (WImp.WeaponSettings.SniperUseReducedHitbox == false)
 		return (HitLocation.Z - P.Location.Z > 0.62 * P.CollisionHeight);
 
-	return STM.CheckHeadShot(P, HitLocation, BulletDir);
+	return WImp.CheckHeadShot(P, HitLocation, BulletDir);
 }
 
 function SetSwitchPriority(pawn Other)
