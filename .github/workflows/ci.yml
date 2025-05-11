@@ -125,7 +125,7 @@ jobs:
         if: ${{(contains(github.ref, 'las') || contains(github.event.repository.name,'LeagueAS'))}}
         shell: pwsh
         run: |
-          "set DEPENDENCIES=InstaGibPlusAssets_v2 LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
+          "set DEPENDENCIES=InstaGibPlusAssets_v2 BaseCylinder BaseCylinder2 HeadCylinder LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
           $checkFiles = "WeaponSettings$"
           $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$"
           $includeEHRFix = $true
