@@ -24,6 +24,7 @@ var float RocketSpreadSpacingDegrees;
 var float GrenadeDamage;
 var float GrenadeHurtRadius;
 var float GrenadeMomentum;
+var bool  RocketCompensatePing;
 
 var float FlakSelectTime;
 var float FlakPostSelectTime;
@@ -38,6 +39,7 @@ var bool  FlakChunkRandomSpread;
 var float FlakSlugDamage;
 var float FlakSlugHurtRadius;
 var float FlakSlugMomentum;
+var bool  FlakCompensatePing;
 
 var float RipperSelectTime;
 var float RipperDownTime;
@@ -48,6 +50,7 @@ var float RipperPrimaryMomentum;
 var float RipperSecondaryHurtRadius;
 var float RipperSecondaryDamage;
 var float RipperSecondaryMomentum;
+var bool  RipperCompensatePing;
 
 var float MinigunSelectTime;
 var float MinigunDownTime;
@@ -62,19 +65,20 @@ var float PulseSelectTime;
 var float PulseDownTime;
 var float PulseSphereDamage;
 var float PulseSphereMomentum;
-var float PulseSphereSpeed;
 var float PulseSphereFireRate;
 var float PulseBoltDPS;
 var float PulseBoltMomentum;
 var float PulseBoltMaxAccumulate;
 var float PulseBoltGrowthDelay;
 var int   PulseBoltMaxSegments;
+var bool  PulseCompensatePing;
 
 var float ShockSelectTime;
 var float ShockDownTime;
 var float ShockBeamDamage;
 var float ShockBeamMomentum;
 var bool  ShockBeamUseReducedHitbox;
+
 var float ShockProjectileDamage;
 var float ShockProjectileHurtRadius;
 var float ShockProjectileMomentum;
@@ -97,6 +101,7 @@ var float BioAltDamage;
 var float BioAltMomentum;
 var float BioHurtRadiusBase;
 var float BioHurtRadiusMax;
+var bool  BioCompensatePing;
 
 var float EnforcerSelectTime;
 var float EnforcerDownTime;
@@ -130,9 +135,17 @@ var float TranslocatorSelectTime;
 var float TranslocatorOutSelectTime;
 var float TranslocatorDownTime;
 var float TranslocatorHealth;
+var bool  TranslocatorCompensatePing;
 
 var int   InvisibilityDuration;
 
+var bool  bEnablePingCompensation;
+
+var bool  bEnableSubTickCompensation;
+
+var int   PingCompensationMax;
+
+var bool  bEnableAnimationAdaptiveHeadHitbox;
 replication {
 	reliable if (Role == ROLE_Authority)
 		HeadHalfHeight,
@@ -158,7 +171,7 @@ replication {
 		GrenadeDamage,
 		GrenadeHurtRadius,
 		GrenadeMomentum,
-
+		RocketCompensatePing,
 		FlakSelectTime,
 		FlakPostSelectTime,
 		FlakDownTime,
@@ -172,6 +185,7 @@ replication {
 		FlakSlugDamage,
 		FlakSlugHurtRadius,
 		FlakSlugMomentum,
+		FlakCompensatePing,
 
 		RipperSelectTime,
 		RipperDownTime,
@@ -182,6 +196,7 @@ replication {
 		RipperSecondaryHurtRadius,
 		RipperSecondaryDamage,
 		RipperSecondaryMomentum,
+		RipperCompensatePing,
 
 		MinigunSelectTime,
 		MinigunDownTime,
@@ -196,13 +211,13 @@ replication {
 		PulseDownTime,
 		PulseSphereDamage,
 		PulseSphereMomentum,
-		PulseSphereSpeed,
 		PulseSphereFireRate,
 		PulseBoltDPS,
 		PulseBoltMomentum,
 		PulseBoltMaxAccumulate,
 		PulseBoltGrowthDelay,
 		PulseBoltMaxSegments,
+		PulseCompensatePing,
 
 		ShockSelectTime,
 		ShockDownTime,
@@ -231,6 +246,7 @@ replication {
 		BioAltMomentum,
 		BioHurtRadiusBase,
 		BioHurtRadiusMax,
+		BioCompensatePing,
 
 		EnforcerSelectTime,
 		EnforcerDownTime,
@@ -264,8 +280,13 @@ replication {
 		TranslocatorOutSelectTime,
 		TranslocatorDownTime,
 		TranslocatorHealth,
+		TranslocatorCompensatePing,
+		InvisibilityDuration,
 
-		InvisibilityDuration;
+		bEnablePingCompensation,
+		bEnableSubTickCompensation,
+		PingCompensationMax,
+		bEnableAnimationAdaptiveHeadHitbox;
 }
 
 simulated final function float WarheadSelectAnimSpeed() {
@@ -491,6 +512,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	GrenadeDamage = S.GrenadeDamage;
 	GrenadeHurtRadius = S.GrenadeHurtRadius;
 	GrenadeMomentum = S.GrenadeMomentum;
+	RocketCompensatePing = S.RocketCompensatePing;
 
 	FlakSelectTime = S.FlakSelectTime;
 	FlakPostSelectTime = S.FlakPostSelectTime;
@@ -505,6 +527,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	FlakSlugDamage = S.FlakSlugDamage;
 	FlakSlugHurtRadius = S.FlakSlugHurtRadius;
 	FlakSlugMomentum = S.FlakSlugMomentum;
+	FlakCompensatePing = S.FlakCompensatePing;
 
 	RipperSelectTime = S.RipperSelectTime;
 	RipperDownTime = S.RipperDownTime;
@@ -515,6 +538,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	RipperSecondaryHurtRadius = S.RipperSecondaryHurtRadius;
 	RipperSecondaryDamage = S.RipperSecondaryDamage;
 	RipperSecondaryMomentum = S.RipperSecondaryMomentum;
+	RipperCompensatePing = S.RipperCompensatePing;
 
 	MinigunSelectTime = S.MinigunSelectTime;
 	MinigunDownTime = S.MinigunDownTime;
@@ -529,13 +553,13 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	PulseDownTime = S.PulseDownTime;
 	PulseSphereDamage = S.PulseSphereDamage;
 	PulseSphereMomentum = S.PulseSphereMomentum;
-	PulseSphereSpeed = S.PulseSphereSpeed;
 	PulseSphereFireRate = S.PulseSphereFireRate;
 	PulseBoltDPS = S.PulseBoltDPS;
 	PulseBoltMomentum = S.PulseBoltMomentum;
 	PulseBoltMaxAccumulate = S.PulseBoltMaxAccumulate;
 	PulseBoltGrowthDelay = S.PulseBoltGrowthDelay;
 	PulseBoltMaxSegments = S.PulseBoltMaxSegments;
+	PulseCompensatePing = S.PulseCompensatePing;
 
 	ShockSelectTime = S.ShockSelectTime;
 	ShockDownTime = S.ShockDownTime;
@@ -548,7 +572,6 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	ShockProjectileBlockBullets = S.ShockProjectileBlockBullets;
 	ShockProjectileBlockFlakChunk = S.ShockProjectileBlockFlakChunk;
 	ShockProjectileBlockFlakSlug = S.ShockProjectileBlockFlakSlug;
-	
 	ShockProjectileTakeDamage = S.ShockProjectileTakeDamage;
 	ShockProjectileCompensatePing = S.ShockProjectileCompensatePing;
 	ShockProjectileHealth = S.ShockProjectileHealth;
@@ -565,6 +588,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	BioAltMomentum = S.BioAltMomentum;
 	BioHurtRadiusBase = S.BioHurtRadiusBase;
 	BioHurtRadiusMax = S.BioHurtRadiusMax;
+	BioCompensatePing = S.BioCompensatePing;
 
 	EnforcerSelectTime = S.EnforcerSelectTime;
 	EnforcerDownTime = S.EnforcerDownTime;
@@ -582,7 +606,7 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	EnforcerReloadTimeDouble = S.EnforcerReloadTimeDouble;
 	EnforcerReloadTimeAltDouble = S.EnforcerReloadTimeAltDouble;
 	EnforcerReloadTimeRepeatDouble = S.EnforcerReloadTimeRepeatDouble;
-
+	
 	HammerSelectTime = S.HammerSelectTime;
 	HammerDownTime = S.HammerDownTime;
 	HammerDamage = S.HammerDamage;
@@ -598,8 +622,16 @@ function InitFromWeaponSettings(WeaponSettings S) {
 	TranslocatorOutSelectTime = S.TranslocatorOutSelectTime;
 	TranslocatorDownTime = S.TranslocatorDownTime;
 	TranslocatorHealth = S.TranslocatorHealth;
-
+	TranslocatorCompensatePing = S.TranslocatorCompensatePing;
 	InvisibilityDuration = S.InvisibilityDuration;
+
+	bEnablePingCompensation = S.bEnablePingCompensation;
+
+	bEnableSubTickCompensation = S.bEnableSubTickCompensation;
+
+	PingCompensationMax = S.PingCompensationMax;
+
+	bEnableAnimationAdaptiveHeadHitbox = S.bEnableAnimationAdaptiveHeadHitbox;
 }
 
 defaultproperties
@@ -633,6 +665,7 @@ defaultproperties
 	GrenadeDamage=80
 	GrenadeHurtRadius=200
 	GrenadeMomentum=1.0
+	RocketCompensatePing=False
 
 	FlakSelectTime=0.625
 	FlakPostSelectTime=0.384615
@@ -647,6 +680,7 @@ defaultproperties
 	FlakSlugDamage=70
 	FlakSlugHurtRadius=150
 	FlakSlugMomentum=1.0
+	FlakCompensatePing=False
 
 	RipperSelectTime=0.75
 	RipperDownTime=0.2
@@ -657,6 +691,7 @@ defaultproperties
 	RipperSecondaryHurtRadius=180
 	RipperSecondaryDamage=34
 	RipperSecondaryMomentum=1.0
+	RipperCompensatePing=False
 
 	MinigunSelectTime=0.555556
 	MinigunDownTime=0.333333
@@ -671,13 +706,13 @@ defaultproperties
 	PulseDownTime=0.26
 	PulseSphereDamage=20
 	PulseSphereMomentum=1.0
-	PulseSphereSpeed=1450.000000
 	PulseSphereFireRate=0.18
 	PulseBoltDPS=72
 	PulseBoltMomentum=1.0
 	PulseBoltMaxAccumulate=0.08
 	PulseBoltGrowthDelay=0.05
 	PulseBoltMaxSegments=10
+	PulseCompensatePing=False
 
 	ShockSelectTime=0.5
 	ShockDownTime=0.259259
@@ -706,6 +741,7 @@ defaultproperties
 	BioAltMomentum=1.0
 	BioHurtRadiusBase=75
 	BioHurtRadiusMax=250
+	BioCompensatePing=False
 
 	EnforcerSelectTime=0.777778
 	EnforcerDownTime=0.266667
@@ -739,6 +775,15 @@ defaultproperties
 	TranslocatorOutSelectTime=0.27
 	TranslocatorDownTime=0.212121
 	TranslocatorHealth=65.0
+	TranslocatorCompensatePing=False
 
 	InvisibilityDuration=45
+
+	bEnablePingCompensation=False
+	
+	bEnableSubTickCompensation=False
+	
+	PingCompensationMax=150
+
+	bEnableAnimationAdaptiveHeadHitbox=False
 }
