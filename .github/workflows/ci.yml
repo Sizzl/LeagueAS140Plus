@@ -127,7 +127,7 @@ jobs:
         run: |
           "set DEPENDENCIES=InstaGibPlusAssets_v2 BaseCylinder BaseCylinder2 HeadCylinder LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
           $checkFiles = "WeaponSettings$"
-          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$"
+          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$|^bbCHSpectator$"
           $includeEHRFix = $true
           Get-ChildItem "${{ env.PKG_NAME }}/Classes" -Filter "*.uc" | Where-Object {$_.BaseName -match $checkFiles} | ForEach-Object {
             Get-Content $_.FullName | ? {$_ -match "bEnhancedSplashIgnoreStationaryPawns|bEnhancedSplashIgnoreTriggers"} | % { $includeEHRFix = $false }
@@ -175,6 +175,22 @@ jobs:
                   $_
                   "var config bool  bEnhancedSplashIgnoreStationaryPawns;"
                   "var config bool  bEnhancedSplashIgnoreTriggers;"
+                } elseif ($uf.BaseName -eq "bbCHSpectator" -and $_ -match "bbSpectator\s(extends|expands)\sCHSpectator") {
+                  "class bbCHSpectator extends LeagueAS_Spectator;"
+                } elseif ($uf.BaseName -eq "bbCHSpectator" -and $_ -match "exec\sfunction\sJump\(") {
+                  "exec function Jump( optional float F )"
+                  "{"
+                  "  if (Level.Game != None && Level.Game.IsA('Assault'))"
+                  "  {"
+                  "    Super.Jump(F);"
+                  "  }"
+                  "  else"
+                  "  {"
+                  "    Jump2(F);"
+                  "  }"
+                  "}"
+                  ""
+                  "exec function Jump2( optional float F )"
                 } elseif ($uf.BaseName -eq "ST_Mutator") {
                     if ($_ -match "default Item name|TournamentWeapon\(A\)\.SetWeaponStay;") {
                         $ui = $true
