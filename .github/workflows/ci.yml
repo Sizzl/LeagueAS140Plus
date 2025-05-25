@@ -127,7 +127,7 @@ jobs:
         run: |
           "set DEPENDENCIES=InstaGibPlusAssets_v2 BaseCylinder BaseCylinder2 HeadCylinder LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
           $checkFiles = "WeaponSettings$"
-          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$|^bbCHSpectator$"
+          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$|^bbCHSpectator$|^ST_RocketMk2$"
           $includeEHRFix = $true
           Get-ChildItem "${{ env.PKG_NAME }}/Classes" -Filter "*.uc" | Where-Object {$_.BaseName -match $checkFiles} | ForEach-Object {
             Get-Content $_.FullName | ? {$_ -match "bEnhancedSplashIgnoreStationaryPawns|bEnhancedSplashIgnoreTriggers"} | % { $includeEHRFix = $false }
@@ -191,6 +191,12 @@ jobs:
                   "}"
                   ""
                   "exec function Jump2( optional float F )"
+                } elseif ($uf.BaseName -eq "ST_RocketMk2" -and $_ -match "BlowUp\(HitLocation\);") {
+                  "if (WImp.WeaponSettings.TranslocatorHealth > 65) {"
+                  " // Rather than implementing a whole thing for this, just set TranslocatorHealth to be something over 65 to enable logging"
+                  " log(`"ST_RocketMk2.BlowUp(`"`$HitLocation`$`") -`"@Level.TimeSeconds`$`"; RPC:`"@WImp.WeaponSettings.RocketCompensatePing`$`"; P:`"@PlayerPawn(Instigator).PlayerReplicationInfo.PlayerName);"
+                  "}"
+                  $_
                 } elseif ($uf.BaseName -eq "ST_Mutator") {
                     if ($_ -match "default Item name|TournamentWeapon\(A\)\.SetWeaponStay;") {
                         $ui = $true
