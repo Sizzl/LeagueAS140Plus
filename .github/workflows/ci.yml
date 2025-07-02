@@ -125,10 +125,11 @@ jobs:
         if: ${{(contains(github.ref, 'las') || contains(github.event.repository.name,'LeagueAS'))}}
         shell: pwsh
         run: |
-          "set DEPENDENCIES=InstaGibPlusAssets_v2 LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
+          "set DEPENDENCIES=InstaGibPlusAssets_v2 BaseCylinder BaseCylinder2 HeadCylinder LeagueAS-CP LeagueAS140 LeagueAS-SP" | Out-File "${{ env.PKG_NAME }}\BuildSettings.bat" -Encoding utf8 -Force
           $checkFiles = "WeaponSettings$"
-          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$"
+          $patchFiles = "bbPlayerReplicationInfo|ST_Mutator|^bbPlayer$|^UTPure$|^IGPlus_WeaponImplementationBase$"
           $includeEHRFix = $true
+          $includeASWarmup = $true
           Get-ChildItem "${{ env.PKG_NAME }}/Classes" -Filter "*.uc" | Where-Object {$_.BaseName -match $checkFiles} | ForEach-Object {
             Get-Content $_.FullName | ? {$_ -match "bEnhancedSplashIgnoreStationaryPawns|bEnhancedSplashIgnoreTriggers"} | % { $includeEHRFix = $false }
           }
@@ -157,6 +158,8 @@ jobs:
                   }
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(Settings.bEnableLocationOffsetFix\s==\sfalse\)" -and $uc -notmatch "bHas469LocationOffsetFix") {
                   " if (Settings.bEnableLocationOffsetFix == false || bHas469LocationOffsetFix)"
+                } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "\(Settings.bEnableLocationOffsetFix\)" -and $uc -notmatch "bHas469LocationOffsetFix") {
+                  " if (Settings.bEnableLocationOffsetFix && !bHas469LocationOffsetFix)"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(zzbLogoDone") {
                   " if (zzbLogoDone || zzAdvertise==0) {"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "var.*zzTrackFOV;") {
@@ -168,6 +171,120 @@ jobs:
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "zzCVDelay,") {
                   "   zzAdvertise,"
                   $_
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "ExternalCommand") {
+                  $includeASWarmup = $false
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "^replication" -and $includeASWarmup) {
+                  "var string ExternalCommand;"
+                  "var bool bWarmupInitComplete;"
+                  ""
+                  $_
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "if\s\(zzbWarmupPlayers\)" -and $includeASWarmup) {
+                  "if (ExternalCommand ~= `"WarmupOnce`" && Settings.bWarmup == false)"
+                  "{"
+                  "  Settings.bWarmup = true;"
+                  "  ExternalCommand = `"`";"
+                  "}"
+                  ""
+                  $_
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "xxHideFortStandards" -and $includeASWarmup) {
+                  $_ -replace "xxHideFortStandards", "xxHideASPoints"
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "local\sFortStandard\szzFS;" -and $includeASWarmup) {
+                  # Inside xxResetGame()
+                  $_
+                  "  local Trigger zzT;"
+                  "  local Mover zzM;"
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match [regex]::Escape("Class'FortStandard', zzFS") -and $includeASWarmup) {
+                  # Inside xxResetGame()
+                  "  if (Level.Game.IsA('Assault'))"
+                  "  {"
+                  "      ForEach Level.AllActors(Class'FortStandard', zzFS)"
+                  "      {"
+                  "        zzFS.Enable('Touch');"
+                  "        zzFS.Enable('Trigger');"
+                  "        zzFS.SetCollision(bool(zzFS.bExtra0), bool(zzFS.bExtra1), bool(zzFS.bExtra2));"
+                  "        zzFS.bProjTarget = bool(zzFS.bExtra3);"
+                  "        zzFS.bExtra0 = 0;"
+                  "        zzFS.bExtra1 = 0;"
+                  "        zzFS.bExtra2 = 0;"
+                  "        zzFS.bExtra3 = 0;"
+                  "      }"
+                  ""
+                  "      ForEach Level.AllActors(Class'Trigger', zzT)"
+                  "      {"
+                  "        zzT.Enable('Touch');"
+                  "        zzT.Enable('Trigger');"
+                  "        zzT.SetCollision(zzT.bDifficulty0, zzT.bDifficulty1, zzT.bDifficulty2);"
+                  "        zzT.bProjTarget = zzT.bDifficulty3;"
+                  "        zzT.bDifficulty0 = True;"
+                  "        zzT.bDifficulty1 = True;"
+                  "        zzT.bDifficulty2 = True;"
+                  "        zzT.bDifficulty3 = True;"
+                  "      }"
+                  ""
+                  "      ForEach Level.AllActors(Class'Mover', zzM)"
+                  "      {"
+                  "        if (zzM.InitialState != 'BumpOpenTimed')"
+                  "        {"
+                  "          zzM.SetCollision(zzM.bDifficulty0, zzM.bDifficulty1, zzM.bDifficulty2);"
+                  "          zzM.bProjTarget = zzM.bDifficulty3;"
+                  "          zzM.bDifficulty0 = True;"
+                  "          zzM.bDifficulty1 = True;"
+                  "          zzM.bDifficulty2 = True;"
+                  "          zzM.bDifficulty3 = True;"
+                  "        }"
+                  "      }"
+                  "  }"
+                  "if (1 == 2)"
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "zzFS\." -and $includeASWarmup) {
+                  # Superceded
+                } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "local\sFortStandard\sFS;" -and $includeASWarmup) {
+                  $_
+                  " local Trigger T;"
+                  " local Mover M;"
+                  "  if (bWarmupInitComplete)"
+                  "    return;"
+                  "  ForEach AllActors(Class'FortStandard', FS)"
+                  "  {"
+                  "    FS.Disable('Touch');"
+                  "    FS.Disable('Trigger');"
+                  "    FS.bExtra0 = byte(FS.bCollideActors);"
+                  "    FS.bExtra1 = byte(FS.bBlockActors);"
+                  "    FS.bExtra2 = byte(FS.bBlockPlayers);"
+                  "    FS.bExtra3 = byte(FS.bProjTarget);"
+                  "    FS.SetCollision(false, false, false);"
+                  "    FS.bProjTarget = false;"
+                  "  }"
+                  ""
+                  "  ForEach AllActors(Class'Trigger',T)"
+                  "  {"
+                  "    T.Disable('Touch');"
+                  "    T.Disable('Trigger');"
+                  "    T.bDifficulty0 = T.bCollideActors;"
+                  "    T.bDifficulty1 = T.bBlockActors;"
+                  "    T.bDifficulty2 = T.bBlockPlayers;"
+                  "    T.bDifficulty3 = T.bProjTarget;"
+                  "    T.SetCollision(false, false, false);"
+                  "    T.bProjTarget = false;"
+                  "  }"
+                  ""
+                  "  ForEach Level.AllActors(Class'Mover', M)"
+                  "  {"
+                  "    if (M.InitialState != 'BumpOpenTimed')"
+                  "    {"
+                  "      M.bDifficulty0 = M.bCollideActors;"
+                  "      M.bDifficulty1 = M.bBlockActors;"
+                  "      M.bDifficulty2 = M.bBlockPlayers;"
+                  "      M.bDifficulty3 = M.bProjTarget;"
+                  "      M.SetCollision(false, false, false);"
+                  "      M.bProjTarget = false;"
+                  "    }"
+                  "  }"
+                  "  bWarmupInitComplete = true;"
+                  "  return;"
+                  "}"
+                  "function zzHideFortStandards()"
+                  "{"
+                  "    local FortStandard FS;"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "=\sSettings.TrackFOV;") {
                   $_
                   "     zzP.zzAdvertise = Settings.Advertise;"
@@ -175,10 +292,11 @@ jobs:
                   $_
                   "var config bool  bEnhancedSplashIgnoreStationaryPawns;"
                   "var config bool  bEnhancedSplashIgnoreTriggers;"
-                } elseif ($uf.BaseName -eq "ST_Mutator") {
-                    if ($_ -match "default Item name|TournamentWeapon\(A\)\.SetWeaponStay;") {
+                } elseif ($uf.BaseName -eq "ST_Mutator" -or $uf.BaseName -eq "IGPlus_WeaponImplementationBase") {
+                    if ($uc -match "default Item name|TournamentWeapon\(A\)\.SetWeaponStay;") {
                         $ui = $true
-                    } elseif ($ui -eq $false -and $_ -match "return\sSuper\.MutatorBroadcastLocalizedMessage") {
+                    }
+                    if ($ui -eq $false -and $_ -match "return\sSuper\.MutatorBroadcastLocalizedMessage") {
                         # Still need to think of a better way of doing this
                         "        // Let other mutators know the default Item name of replaced weapons, helps with old HUD replacement and chat mutators"
                         "        switch (Caps(Class<Weapon>(OptionalObject).default.ItemName))"
@@ -266,7 +384,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ucc-output
-          path: System/UCC.log
+          path: |
+            ${{ env.PKG_NAME }}/Classes/*.uc
+            System/UCC.log
+
 
       - name: Strip text
         run: "System/ucc stripsource ../${{ env.PKG_NAME }}/System/${{ env.PKG_NAME }}.u"
