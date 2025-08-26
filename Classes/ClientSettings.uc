@@ -514,6 +514,7 @@ defaultproperties
 	bFlakUseClientSideAnimations=False
 	bSniperUseClientSideAnimations=False
 	bTranslocatorUseClientSideAnimations=False
+
 	MenuX=200
 	MenuY=200
 	MenuWidth=240

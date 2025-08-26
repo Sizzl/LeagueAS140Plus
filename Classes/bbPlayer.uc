@@ -4118,6 +4118,11 @@ function PlayBackInput(IGPlus_SavedInput Old, IGPlus_SavedInput I) {
 			}
 		}
 
+		if (I.bLive == false) {
+			DodgeDir = DODGE_None;
+			DodgeClickTimer = DodgeClickTime;
+		}
+
 		// handle firing and alt-firing on server
 		if (I.bFire) {
 			if (bFire == 0) {
@@ -4145,6 +4150,7 @@ function PlayBackInput(IGPlus_SavedInput Old, IGPlus_SavedInput I) {
 	} else if (RemoteRole == ROLE_Authority) {
 		// this assumes that you always replay up until the present, otherwise
 		// youd have to save and restore these values
+		SetRotation(Old.SavedRotation);
 		bDodging = Old.SavedDodging;
 		DodgeDir = Old.SavedDodgeDir;
 		DodgeClickTimer = Old.SavedDodgeClickTimer;
@@ -5499,9 +5505,6 @@ function xxUpdateRotation(float DeltaTime, float maxPitch)
 	local rotator newRotation;
 	local float PitchDelta, YawDelta;
 
-	if (bUpdating)
-		return;
-
 	DesiredRotation = ViewRotation; //save old rotation
 
 	PitchDelta = 32.0 * DeltaTime * aLookUp * IGPlus_ZoomToggle_SensitivityFactorY + LookUpFractionalPart;
@@ -5516,11 +5519,13 @@ function xxUpdateRotation(float DeltaTime, float maxPitch)
 	if (!Settings.bUseOldMouseInput)
 		TurnFractionalPart = YawDelta - int(YawDelta);
 
-	if (Settings.bDebugMovement && (Abs(PitchDelta) > 1 || Abs(YawDelta) > 1))
-		ClientDebugMessage("PitchDelta:"@PitchDelta@"YawDelta:"@YawDelta);
+	if (bUpdating == false) {
+		if (Settings.bDebugMovement && (Abs(PitchDelta) > 1 || Abs(YawDelta) > 1))
+			ClientDebugMessage("PitchDelta:"@PitchDelta@"YawDelta:"@YawDelta);
 
-	ViewShake(deltaTime);		// ViewRotation is fuked in here.
-	ViewFlash(deltaTime);
+		ViewShake(deltaTime);		// ViewRotation is fuked in here.
+		ViewFlash(deltaTime);
+	}
 
 	newRotation = Rotation;
 	newRotation.Yaw = ViewRotation.Yaw;
