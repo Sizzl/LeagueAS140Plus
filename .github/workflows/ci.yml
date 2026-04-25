@@ -136,6 +136,7 @@ jobs:
           if ($includeEHRFix) {
             $patchFiles = "$($patchFiles)|$($checkFiles)"
           }
+          $patchNotes = @()
           Get-ChildItem "${{ env.PKG_NAME }}/Classes" -Filter "*.uc" | Where-Object {$_.BaseName -match $patchFiles} | ForEach-Object {
             $uf = $_
             $ui = $false
@@ -144,6 +145,7 @@ jobs:
             $ux += @($uc -split "`n" | % {
                 if ($uf.BaseName -eq "bbPlayerReplicationInfo" -and $_ -match "bbPlayerReplicationInfo\s(extends|expands)\sPlayerReplicationInfo") {
                   "class bbPlayerReplicationInfo extends LeagueAS_ExtPlayerReplicationInfo;"
+                  $patchNotes += "Patch 1: Replication Info"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "bIs469Client\s=\sint") {
                   $_
                   if ($uc -notmatch "bHas469LocationOffsetFix") {
@@ -155,11 +157,13 @@ jobs:
                     "       bHas469LocationOffsetFix = True;"
                     "     }"
                     "   }"
+                    $patchNotes += "Patch 2: Inject bHas469LocationOffsetFix detection"
                   }
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "DropFlag,") {
                   "ThrowArmor,"
                   "ThrowArmour,"
                   $_
+                  $patchNotes += "Patch 3a: Inject ThrowArmor/ThrowArmour (replication)"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "exec\sfunction\sThrowWeapon") {
                   "function DropInventoryItem(Inventory Inv)"
                   "{"
@@ -228,21 +232,27 @@ jobs:
                   "}"
                   ""
                   $_
+                  $patchNotes += "Patch 3b: Inject ThrowArmor/ThrowArmour (exec)"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(Settings.bEnableLocationOffsetFix\s==\sfalse\)" -and $uc -notmatch "bHas469LocationOffsetFix") {
                   " if (Settings.bEnableLocationOffsetFix == false || bHas469LocationOffsetFix)"
+                  $patchNotes += "Patch 4a: Auto disable bEnableLocationOffsetFix for 469c+"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "\(Settings.bEnableLocationOffsetFix\)" -and $uc -notmatch "bHas469LocationOffsetFix") {
                   " if (Settings.bEnableLocationOffsetFix && !bHas469LocationOffsetFix)"
+                  $patchNotes += "Patch 4b: Auto disable bEnableLocationOffsetFix for 469c+"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "if\s\(zzbLogoDone") {
                   " if (zzbLogoDone || zzAdvertise==0) {"
+                  $patchNotes += "Patch 5a: Disable logos"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "var.*zzTrackFOV;") {
                   $_
                   "var int    zzAdvertise; // injected logo override"
                   if ($uc -notmatch "bHas469LocationOffsetFix") {
                     "var bool   bHas469LocationOffsetFix; // detect 469c or above"
                   }
+                  $patchNotes += "Patch 5b: Disable logos"
                 } elseif ($uf.BaseName -eq "bbPlayer" -and $_ -match "zzCVDelay,") {
                   "   zzAdvertise,"
                   $_
+                  $patchNotes += "Patch 5c: Disable logos"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "ExternalCommand") {
                   $includeASWarmup = $false
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "^replication" -and $includeASWarmup) {
@@ -250,6 +260,7 @@ jobs:
                   "var bool bWarmupInitComplete;"
                   ""
                   $_
+                  $patchNotes += "Patch 6a: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "if\s\(zzbWarmupPlayers\)" -and $includeASWarmup) {
                   "if (ExternalCommand ~= `"WarmupOnce`" && Settings.bWarmup == false)"
                   "{"
@@ -258,13 +269,16 @@ jobs:
                   "}"
                   ""
                   $_
+                  $patchNotes += "Patch 6b: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "xxHideFortStandards" -and $includeASWarmup) {
                   $_ -replace "xxHideFortStandards", "xxHideASPoints"
+                  $patchNotes += "Patch 6c: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "local\sFortStandard\szzFS;" -and $includeASWarmup) {
                   # Inside xxResetGame()
                   $_
                   "  local Trigger zzT;"
                   "  local Mover zzM;"
+                  $patchNotes += "Patch 6d: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match [regex]::Escape("Class'FortStandard', zzFS") -and $includeASWarmup) {
                   # Inside xxResetGame()
                   "  if (Level.Game.IsA('Assault'))"
@@ -307,8 +321,10 @@ jobs:
                   "      }"
                   "  }"
                   "if (1 == 2)"
+                  $patchNotes += "Patch 6e: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "zzFS\." -and $includeASWarmup) {
                   # Superceded
+                  $patchNotes += "Patch 6f: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "local\sFortStandard\sFS;" -and $includeASWarmup) {
                   $_
                   " local Trigger T;"
@@ -357,13 +373,16 @@ jobs:
                   "function zzHideFortStandards()"
                   "{"
                   "    local FortStandard FS;"
+                  $patchNotes += "Patch 6g: Fix Warmup support for Assault"
                 } elseif ($uf.BaseName -eq "UTPure" -and $_ -match "=\sSettings.TrackFOV;") {
                   $_
                   "     zzP.zzAdvertise = Settings.Advertise;"
+                  $patchNotes += "Patch 7: Sync Settings.Advertise"
                 } elseif ($uf.BaseName -eq "WeaponSettings" -and $includeEHRFix -and $_ -match "bool\s*bEnableEnhancedSplashCombo") {
                   $_
                   "var config bool  bEnhancedSplashIgnoreStationaryPawns;"
                   "var config bool  bEnhancedSplashIgnoreTriggers;"
+                  $patchNotes += "Patch 8a: Enhanced splash tweaks for stationary pawns and triggers"
                 } elseif ($uf.BaseName -eq "ST_Mutator" -or $uf.BaseName -eq "IGPlus_WeaponImplementationBase") {
                     if ($uc -match "default Item name|TournamentWeapon\(A\)\.SetWeaponStay;") {
                         $ui = $true
@@ -373,6 +392,7 @@ jobs:
                         "        TournamentWeapon(A).SetWeaponStay();"
                         ""
                         $_
+                        $patchNotes += "Patch 9: Weapon stay fix"
                     } elseif ($includeEHRFix -and $_ -match "Victim == self") {
                         "   if (Victim != Self && ((Victim.IsA('StationaryPawn') && WeaponSettings.bEnhancedSplashIgnoreStationaryPawns) || Victim.IsA('Trigger') && WeaponSettings.bEnhancedSplashIgnoreTriggers))"
                         "       {"
@@ -392,6 +412,7 @@ jobs:
                         "       }"
                         ""
                         $_
+                        $patchNotes += "Patch 8b: Enhanced splash tweaks for stationary pawns and triggers"
                     } else {
                         $_
                     }
@@ -402,6 +423,8 @@ jobs:
             $uf | Rename-Item -NewName $($uf.FullName -replace "\.uc",".uczzz") -Force -ErrorAction SilentlyContinue
             $($ux -join "`n") | Out-File $uf.FullName -Encoding default -Force
           }
+          Write-Host "Patches added:"
+          $patchNotes | Sort-Object | Write-Host
           exit 0
 
       - name: Build ${{ github.event.repository.name }}
