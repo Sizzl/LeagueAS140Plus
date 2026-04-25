@@ -58,6 +58,7 @@ var config int    DesiredNetspeed;
 var config bool   bNoSmoothing;
 var config bool   bNoOwnFootsteps;
 var config bool   bLogClientMessages;
+var config bool   bDemoShowClientMessages;
 var config bool   bDebugMovement;
 var config bool   bEnableKillCam;
 var config float  FakeCAPInterval; // Send a FakeCAP after no CAP has been sent for this amount of time
@@ -137,10 +138,12 @@ var config bool   bShockProjectileUseClientSideAnimations;
 var config bool   bPulseUseClientSideAnimations;
 var config bool   bRipperUseClientSideAnimations;
 var config bool   bFlakUseClientSideAnimations;
+var config bool   bRocketUseClientSideAnimations;
 var config bool   bSniperUseClientSideAnimations;
 var config bool   bTranslocatorUseClientSideAnimations;
 
 var config float MenuX, MenuY, MenuWidth, MenuHeight;
+var config string ServerAdminPasswords[16];
 
 var Sound DefaultHitSound[16];
 var Sound LoadedHitSound[16];
@@ -366,6 +369,7 @@ simulated function string DumpSettings() {
 		GetSetting("bNoSmoothing")$
 		GetSetting("bNoOwnFootsteps")$
 		GetSetting("bLogClientMessages")$
+		GetSetting("bDemoShowClientMessages")$
 		GetSetting("bDebugMovement")$
 		GetSetting("bEnableKillCam")$
 		GetSetting("FakeCAPInterval")$
@@ -414,6 +418,7 @@ simulated function string DumpSettings() {
 		GetSetting("bPulseUseClientSideAnimations")$
 		GetSetting("bRipperUseClientSideAnimations")$
 		GetSetting("bFlakUseClientSideAnimations")$
+		GetSetting("bRocketUseClientSideAnimations")$
 		GetSetting("bSniperUseClientSideAnimations")$
 		GetSetting("bTranslocatorUseClientSideAnimations")$
 		DumpCrosshairLayers();
@@ -464,6 +469,7 @@ defaultproperties
 	bNoSmoothing=True
 	bNoOwnFootsteps=False
 	bLogClientMessages=True
+	bDemoShowClientMessages=False
 	bDebugMovement=False
 	bEnableKillCam=False
 	FakeCAPInterval=0.1
@@ -512,6 +518,7 @@ defaultproperties
 	bPulseUseClientSideAnimations=False
 	bRipperUseClientSideAnimations=False
 	bFlakUseClientSideAnimations=False
+	bRocketUseClientSideAnimations=False
 	bSniperUseClientSideAnimations=False
 	bTranslocatorUseClientSideAnimations=False
 

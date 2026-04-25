@@ -2,6 +2,9 @@ class IGPlus_SettingsContent extends UMenuPageWindow;
 
 var ClientSettings Settings;
 
+var UWindowLabelControl Lbl_Header;
+var localized string HeaderText;
+
 var UWindowLabelControl Lbl_MoreInformation;
 var localized string MoreInformationText;
 
@@ -76,6 +79,10 @@ var localized string MoreInformationText;
 	var UWindowCheckbox Chk_LogClientMessages;
 	var localized string LogClientMessagesText;
 	var localized string LogClientMessagesHelp;
+
+	var UWindowCheckbox Chk_DemoShowClientMessages;
+	var localized string DemoShowClientMessagesText;
+	var localized string DemoShowClientMessagesHelp;
 
 	var UWindowCheckbox Chk_DebugMovement;
 	var localized string DebugMovementText;
@@ -435,6 +442,10 @@ var localized string MoreInformationText;
 	var UWindowCheckbox Chk_FlakUseClientSideAnimations;
 	var localized string FlakUseClientSideAnimationsText;
 	var localized string FlakUseClientSideAnimationsHelp;
+
+	var UWindowCheckbox Chk_RocketUseClientSideAnimations;
+	var localized string RocketUseClientSideAnimationsText;
+	var localized string RocketUseClientSideAnimationsHelp;
 
 	var UWindowCheckbox Chk_SniperUseClientSideAnimations;
 	var localized string SniperUseClientSideAnimationsText;
@@ -834,6 +845,10 @@ function Created() {
 	ControlOffset = PaddingY;
 	ControlWidth = WinWidth - 2*PaddingX;
 
+	Lbl_Header = CreateLabel(HeaderText);
+	Lbl_Header.Align = TA_Center;
+	Lbl_Header.SetFont(F_Bold);
+
 	Lbl_MoreInformation = CreateLabel(MoreInformationText);
 	Lbl_MoreInformation.Align = TA_Center;
 	Lbl_MoreInformation.SetFont(F_Bold);
@@ -862,11 +877,13 @@ function Created() {
 	Chk_PulseUseClientSideAnimations = CreateCheckbox(PulseUseClientSideAnimationsText, PulseUseClientSideAnimationsHelp);
 	Chk_RipperUseClientSideAnimations = CreateCheckbox(RipperUseClientSideAnimationsText, RipperUseClientSideAnimationsHelp);
 	Chk_FlakUseClientSideAnimations = CreateCheckbox(FlakUseClientSideAnimationsText, FlakUseClientSideAnimationsHelp);
+	Chk_RocketUseClientSideAnimations = CreateCheckbox(RocketUseClientSideAnimationsText, RocketUseClientSideAnimationsHelp);
 	Chk_SniperUseClientSideAnimations = CreateCheckbox(SniperUseClientSideAnimationsText, SniperUseClientSideAnimationsHelp);
 	Chk_TranslocatorUseClientSideAnimations = CreateCheckbox(TranslocatorUseClientSideAnimationsText, TranslocatorUseClientSideAnimationsHelp);
 
 	Lbl_Advanced = CreateSeparator(AdvancedText);
 	Chk_LogClientMessages = CreateCheckbox(LogClientMessagesText, LogClientMessagesHelp);
+	Chk_DemoShowClientMessages = CreateCheckbox(DemoShowClientMessagesText, DemoShowClientMessagesHelp);
 	Chk_DebugMovement = CreateCheckbox(DebugMovementText, DebugMovementHelp);
 	Chk_LocationOffsetFix = CreateCheckbox(LocationOffsetFixText, LocationOffsetFixHelp);
 
@@ -1036,6 +1053,7 @@ function Load() {
 	Edit_FakeCAPInterval.SetValue(string(Settings.FakeCAPInterval));
 
 	Chk_LogClientMessages.bChecked = Settings.bLogClientMessages;
+	Chk_DemoShowClientMessages.bChecked = Settings.bDemoShowClientMessages;
 	Chk_DebugMovement.bChecked = Settings.bDebugMovement;
 	Chk_LocationOffsetFix.bChecked = Settings.bEnableLocationOffsetFix;
 
@@ -1120,6 +1138,7 @@ function Load() {
 	Chk_PulseUseClientSideAnimations.bChecked = Settings.bPulseUseClientSideAnimations;
 	Chk_RipperUseClientSideAnimations.bChecked = Settings.bRipperUseClientSideAnimations;
 	Chk_FlakUseClientSideAnimations.bChecked = Settings.bFlakUseClientSideAnimations;
+	Chk_RocketUseClientSideAnimations.bChecked = Settings.bRocketUseClientSideAnimations;
 	Chk_SniperUseClientSideAnimations.bChecked = Settings.bSniperUseClientSideAnimations;
 	Chk_TranslocatorUseClientSideAnimations.bChecked = Settings.bTranslocatorUseClientSideAnimations;
 
@@ -1154,6 +1173,7 @@ function Save() {
 	Settings.FakeCAPInterval = float(Edit_FakeCAPInterval.GetValue());
 
 	Settings.bLogClientMessages = Chk_LogClientMessages.bChecked;
+	Settings.bDemoShowClientMessages = Chk_DemoShowClientMessages.bChecked;
 	Settings.bDebugMovement = Chk_DebugMovement.bChecked;
 	Settings.bEnableLocationOffsetFix = Chk_LocationOffsetFix.bChecked;
 
@@ -1239,6 +1259,7 @@ function Save() {
 	Settings.bPulseUseClientSideAnimations = Chk_PulseUseClientSideAnimations.bChecked;
 	Settings.bRipperUseClientSideAnimations = Chk_RipperUseClientSideAnimations.bChecked;
 	Settings.bFlakUseClientSideAnimations = Chk_FlakUseClientSideAnimations.bChecked;
+	Settings.bRocketUseClientSideAnimations = Chk_RocketUseClientSideAnimations.bChecked;
 	Settings.bSniperUseClientSideAnimations = Chk_SniperUseClientSideAnimations.bChecked;
 	Settings.bTranslocatorUseClientSideAnimations = Chk_TranslocatorUseClientSideAnimations.bChecked;
 
@@ -1251,6 +1272,7 @@ function Save() {
 		P.UpdateReplicatedWeaponSetting("bPulseUseClientSideAnimations", Chk_PulseUseClientSideAnimations.bChecked);
 		P.UpdateReplicatedWeaponSetting("bRipperUseClientSideAnimations", Chk_RipperUseClientSideAnimations.bChecked);
 		P.UpdateReplicatedWeaponSetting("bFlakUseClientSideAnimations", Chk_FlakUseClientSideAnimations.bChecked);
+		P.UpdateReplicatedWeaponSetting("bRocketUseClientSideAnimations", Chk_RocketUseClientSideAnimations.bChecked);
 		P.UpdateReplicatedWeaponSetting("bSniperUseClientSideAnimations", Chk_SniperUseClientSideAnimations.bChecked);
 		P.UpdateReplicatedWeaponSetting("bTranslocatorUseClientSideAnimations", Chk_TranslocatorUseClientSideAnimations.bChecked);
 	}
@@ -1275,6 +1297,7 @@ function SaveConfigs() {
 
 defaultproperties
 {
+	HeaderText="Client Settings"
 	MoreInformationText="Right-click on settings to get more information"
 
 	GeneralText="General"
@@ -1328,6 +1351,9 @@ defaultproperties
 
 		LogClientMessagesText="Log Client Messages"
 		LogClientMessagesHelp="If checked, write client messages to log in addition to console"
+
+		DemoShowClientMessagesText="Demo Show Client Messages"
+		DemoShowClientMessagesHelp="If checked, show client messages during demo playback"
 
 		DebugMovementText="Trace Movement Input"
 		DebugMovementHelp="If checked, trace movement input to demo"
@@ -1578,28 +1604,31 @@ defaultproperties
 
 	ClientSideAnimationsText="Ping Compensation Settings"
 
-		BioUseClientSideAnimationsText="Use Client-Side Animations for Bio Rifle"
+		BioUseClientSideAnimationsText="Client-Side Animations Bio Rifle"
 		BioUseClientSideAnimationsHelp="If checked, use client-side animations for Bio Rifle"
 
-		ShockBeamUseClientSideAnimationsText="Use Client-Side Animations for Shock Beam"
+		ShockBeamUseClientSideAnimationsText="Client-Side Animations Shock Beam"
 		ShockBeamUseClientSideAnimationsHelp="If checked, use client-side animations for Shock Beam"
 
-		ShockProjectileUseClientSideAnimationsText="Use Client-Side Animations for Shock Projectile"
+		ShockProjectileUseClientSideAnimationsText="Client-Side Animations Shock Projectile"
 		ShockProjectileUseClientSideAnimationsHelp="If checked, use client-side animations for Shock Projectile"
 
-		PulseUseClientSideAnimationsText="Use Client-Side Animations for Pulse Rifle"
+		PulseUseClientSideAnimationsText="Client-Side Animations Pulse Rifle"
 		PulseUseClientSideAnimationsHelp="If checked, use client-side animations for Pulse Rifle"
 
-		RipperUseClientSideAnimationsText="Use Client-Side Animations for Ripper"
+		RipperUseClientSideAnimationsText="Client-Side Animations Ripper"
 		RipperUseClientSideAnimationsHelp="If checked, use client-side animations for Ripper"
 
-		FlakUseClientSideAnimationsText="Use Client-Side Animations for Flak Cannon"
+		FlakUseClientSideAnimationsText="Client-Side Animations Flak Cannon"
 		FlakUseClientSideAnimationsHelp="If checked, use client-side animations for Flak Cannon"
 
-		SniperUseClientSideAnimationsText="Use Client-Side Animations for Sniper Rifle"
+		RocketUseClientSideAnimationsText="Client-Side Animations Rocket Launcher"
+		RocketUseClientSideAnimationsHelp="If checked, use client-side animations for Rocket Launcher"
+
+		SniperUseClientSideAnimationsText="Client-Side Animations Sniper Rifle"
 		SniperUseClientSideAnimationsHelp="If checked, use client-side animations for Sniper Rifle"
 
-		TranslocatorUseClientSideAnimationsText="Use Client-Side Animations for Translocator"
+		TranslocatorUseClientSideAnimationsText="Client-Side Animations Translocator"
 		TranslocatorUseClientSideAnimationsHelp="If checked, use client-side animations for Translocator"
 
 	PaddingX=20

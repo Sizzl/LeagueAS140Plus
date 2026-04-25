@@ -295,6 +295,10 @@ var float IGPlus_ZoomToggle_SensitivityFactorY;
 var ReplicationInfo IGPlus_AdditionalReplicationInfo;
 var bool IGPlus_TryOpenSettingsMenu;
 var IGPlus_SettingsDialog IGPlus_SettingsMenu;
+var Object IGPlus_ServerSettingsHelper;
+var ServerSettings IGPlus_ServerSettingsMenuData;
+var bool IGPlus_ServerSettingsMenuLoaded;
+var bool IGPlus_ServerSettingsMenuCanEdit;
 
 struct IGPlus_WarpFix {
 	var vector OldLocation;
@@ -306,11 +310,29 @@ struct IGPlus_WarpFixClient {
 	var float TimeStamp;
 };
 
+struct IGPlus_SnapData {
+	var vector Location;
+	var vector Velocity;
+	var rotator Rotation;
+	var name AnimSequence;
+	var byte AnimFrameByte;
+	var byte AnimIntentBits;
+	var byte AnimDodgeDir;
+	var byte AnimPhysics;
+	var vector MoverLocation;
+	var int Counter;
+	var bool bHardSnap;
+	var bool bBasedOnMover;
+	var Actor BaseMover;
+};
+
 var bool IGPlus_EnableWarpFix;
 var bool IGPlus_WarpFixUpdate;
 var float IGPlus_WarpFixDelay;
 var IGPlus_WarpFix IGPlus_WarpFixData;
 var IGPlus_WarpFixClient IGPlus_WarpFixClientData;
+var IGPlus_SnapData IGPlus_SnapReplicatedData;
+var IGPlus_SnapData IGPlus_SnapReplicatedDataPrev;
 
 const IGPlus_LocationOffsetFix_DummyVel = vect(4.56,4.56,0.0);
 
@@ -323,6 +345,8 @@ var vector IGPlus_LocationOffsetFix_PredictionOffset;
 var vector IGPlus_LocationOffsetFix_Velocity;
 var vector IGPlus_LocationOffsetFix_GroundNormal;
 var bool IGPlus_LocationOffsetFix_OnGround;
+var bool IGPlus_LocationOffsetFix_WasOnMover;
+var byte IGPlus_LocationOffsetFix_MoverTransitionFrames;
 var bool IGPlus_LocationOffsetFix_FootstepQueued;
 var vector IGPlus_LocationOffsetFix_SafeLocation;
 var IGPlus_CollisionDummy IGPlus_LocationOffsetFix_CollisionDummy;
@@ -335,6 +359,59 @@ var IGPlus_CollisionDummy IGPlus_LocationOffsetFix_DummyList;
 var float LocalExtrapolationOwnPingFactor;
 var float LocalExtrapolationOtherPingFactor;
 
+var IGPlus_InterpSnapshot IGPlus_SnapInterp_Data[16];
+var int   IGPlus_SnapInterp_DataIndex;
+var int   IGPlus_SnapInterp_Count;
+var float IGPlus_SnapInterp_InterpDelay;
+var float IGPlus_SnapInterp_LastArrivalTime;
+var float IGPlus_SnapInterp_MeanInterval;
+var float IGPlus_SnapInterp_JitterEstimate;
+var bool  IGPlus_SnapInterp_NetDebug;
+var float IGPlus_SnapInterp_NetDebugNextTime;
+var int   IGPlus_SnapInterp_LastCounter;
+var byte  IGPlus_SnapInterp_LastInterpMode;
+var int   IGPlus_SnapInterp_LastHintAgeMs;
+var string IGPlus_SnapInterp_LastHintSource;
+var float IGPlus_SnapInterp_ServerNextTime;
+var vector IGPlus_SnapInterp_ServerLastLocation;
+var float IGPlus_SnapInterp_ServerLastTime;
+var bool  IGPlus_SnapInterp_ServerHasLast;
+var bool  IGPlus_SnapInterp_EnabledLast;
+var int   IGPlus_SnapInterp_StatSnapPackets;
+var int   IGPlus_SnapInterp_StatInterp;
+var int   IGPlus_SnapInterp_StatExtrap;
+var int   IGPlus_SnapInterp_StatClamp;
+var int   IGPlus_SnapInterp_StatFail;
+var int   IGPlus_SnapInterp_StatHardSnap;
+var int   IGPlus_ClientSnapInterpDelayMs;
+var int   IGPlus_ClientSnapInterpDelaySampleCount;
+var int   IGPlus_ClientSnapInterpDelayMedianMs;
+var int   IGPlus_ClientSnapInterpDelaySpreadMs;
+var float IGPlus_ServerSnapInterpDelayMsSmoothed;
+var bool  IGPlus_ServerSnapInterpDelayValid;
+var bool  IGPlus_ServerSnapInterpTrusted;
+var float IGPlus_ServerSnapInterpLastAcceptedTime;
+var float IGPlus_NextSnapInterpDelayReportTime;
+var float IGPlus_NextSnapInterpDelayClientReportTime;
+var int   IGPlus_ServerSnapInterpDelayReportedMsEcho;
+var int   IGPlus_ServerSnapInterpDelayClampedMsEcho;
+var int   IGPlus_ServerSnapInterpDelaySmoothedMsEcho;
+var bool  IGPlus_ServerSnapInterpDelayValidEcho;
+var bool  IGPlus_ServerSnapInterpTrustedEcho;
+var float IGPlus_ServerSnapInterpDelayEchoTime;
+var float IGPlus_ServerSnapInterpLastAcceptedTimeEcho;
+var bool  IGPlus_SnapInterp_CheckActive;
+var float IGPlus_SnapInterp_CheckDuration;
+var float IGPlus_SnapInterp_CheckEndTime;
+var string IGPlus_SnapInterp_CheckProfile;
+var bbPlayer IGPlus_SnapInterp_CheckTarget;
+var int   IGPlus_SnapInterp_CheckBaseSnapPackets;
+var int   IGPlus_SnapInterp_CheckBaseInterp;
+var int   IGPlus_SnapInterp_CheckBaseExtrap;
+var int   IGPlus_SnapInterp_CheckBaseClamp;
+var int   IGPlus_SnapInterp_CheckBaseFail;
+var int   IGPlus_SnapInterp_CheckBaseHardSnap;
+
 var bool IGPlus_AlwaysRenderFlagCarrier;
 var bool IGPlus_AlwaysRenderDroppedFlags;
 var bool IGPlus_InitFlagSprites;
@@ -342,9 +419,10 @@ var IGPlus_FlagSprite IGPlus_TeamFlagSprite[4];
 
 var bool IGPlus_EnableDualButtonSwitch;
 var bool IGPlus_UseFastWeaponSwitch;
-
+var bool IGPlus_DeferredWeaponSwitch;
 
 var bool IGPlus_EnableInputReplication;
+var bool IGPlus_EnableSnapshotInterpolation;
 var bool IGPlus_PressedJumpSave;
 var IGPlus_SavedInputChain IGPlus_SavedInputChain;
 var IGPlus_DataBuffer IGPlus_InputReplicationBuffer;
@@ -361,17 +439,20 @@ struct ReplBuffer {
 
 var string IGPlus_LogoVersionText;
 
-var float FRandValues[47]; // rX Added
-var int FRandValuesIndex; // rX Added
-var int FRandValuesLength; // rX Added
+// rX Added
 
-struct ClientWeaponSettings { // rX Added
+var float FRandValues[47];
+var int FRandValuesIndex;
+var int FRandValuesLength;
+
+struct ClientWeaponSettings {
 	var bool bBioUseClientSideAnimations;
 	var bool bShockBeamUseClientSideAnimations;
 	var bool bShockProjectileUseClientSideAnimations;
 	var bool bPulseUseClientSideAnimations;
 	var bool bRipperUseClientSideAnimations;
 	var bool bFlakUseClientSideAnimations;
+	var bool bRocketUseClientSideAnimations;
 	var bool bSniperUseClientSideAnimations;
 	var bool bTranslocatorUseClientSideAnimations;
 };
@@ -380,8 +461,6 @@ var ClientWeaponSettings ClientWeaponSettingsData;
 
 var bool bEnableDamageDebugMode;
 var bool bEnableDamageDebugConsoleMessages;
-
-var NavigationPoint LastStartSpot2, LastStartSpot3;
 
 replication
 {
@@ -419,13 +498,23 @@ replication
 		zzMinimumNetspeed,
 		zzTrackFOV,
 		zzWaitTime,
-		bEnableDamageDebugMode,
-		bEnableDamageDebugConsoleMessages;
+		IGPlus_ServerSnapInterpDelayReportedMsEcho,
+			IGPlus_ServerSnapInterpDelayClampedMsEcho,
+			IGPlus_ServerSnapInterpDelaySmoothedMsEcho,
+			IGPlus_ServerSnapInterpDelayValidEcho,
+			IGPlus_ServerSnapInterpTrustedEcho,
+			IGPlus_ServerSnapInterpDelayEchoTime,
+			IGPlus_ServerSnapInterpLastAcceptedTimeEcho,
+			bEnableDamageDebugMode,
+			bEnableDamageDebugConsoleMessages;
 
 	unreliable if ( Role == ROLE_Authority )
 		DuckFractionRepl,
 		IGPlus_AdditionalReplicationInfo,
-		IGPlus_WarpFixData;
+		IGPlus_WarpFixData,
+		IGPlus_EnableSnapshotInterpolation,
+		IGPlus_SnapReplicatedData,
+		IGPlus_SnapReplicatedDataPrev;
 
 	unreliable if ( bDrawDebugData && RemoteRole == ROLE_AutonomousProxy )
 		clientForcedPosition,
@@ -444,6 +533,9 @@ replication
 		FakeCAPInterval,
 		IGPlus_DamageEvent_ShowOnDeath,
 		IGPlus_EnableDualButtonSwitch,
+		IGPlus_ClientSnapInterpDelayMs,
+		IGPlus_ClientSnapInterpDelaySampleCount,
+		IGPlus_ClientSnapInterpDelaySpreadMs,
 		PingAverage,
 		zzbDemoRecording,
 		zzNetspeed,
@@ -483,11 +575,14 @@ replication
 		IGPlus_ForcedSettingsInit,
 		IGPlus_ForcedSettingRegister,
 		IGPlus_ForcedSettingsApply,
+		IGPlus_ServerSettingsInit,
+		IGPlus_ServerSettingsSet,
+		IGPlus_ServerSettingsDone,
 		IGPlus_ClientReStart,
-		IGPlus_NotifyPlayerRestart;
+		IGPlus_NotifyPlayerRestart,
+		ClientAddMomentum;
 
 	unreliable if (RemoteRole == ROLE_AutonomousProxy)
-		ClientAddMomentum,
 		xxCAP,
 		xxCAPLevelBase,
 		xxCAPWalking,
@@ -515,6 +610,9 @@ replication
 		IGPlus_ForcedSettingsOK,
 		IGPlus_ForcedSettings_InitOK,
 		PrintWeaponState,
+		IGPlus_ServerNetcodeHelp,
+		IGPlus_ServerSetNetcodeSetting,
+		IGPlus_ServerRequestSettings,
 		ServerSetDodgeSettings,
 		xxExplodeOther,
 		xxNN_AltFire,
@@ -675,6 +773,8 @@ simulated event Destroyed() {
 	if (Role == ROLE_SimulatedProxy && IGPlus_LocationOffsetFix_CollisionDummy != none) {
 		IGPlus_LocationOffsetFix_DestroyCollisionDummy();
 	}
+	if (Role == ROLE_SimulatedProxy)
+		IGPlus_SnapInterp_Reset();
 
 	if (bTraceInput && IGPlus_InputLogFile != none)
 		IGPlus_InputLogFile.StopLog();
@@ -1070,6 +1170,7 @@ simulated event PostNetBeginPlay()
 	ClientWeaponSettingsData.bPulseUseClientSideAnimations = Settings.bPulseUseClientSideAnimations;
 	ClientWeaponSettingsData.bRipperUseClientSideAnimations = Settings.bRipperUseClientSideAnimations;
 	ClientWeaponSettingsData.bFlakUseClientSideAnimations = Settings.bFlakUseClientSideAnimations;
+	ClientWeaponSettingsData.bRocketUseClientSideAnimations = Settings.bRocketUseClientSideAnimations;
 	ClientWeaponSettingsData.bSniperUseClientSideAnimations = Settings.bSniperUseClientSideAnimations;
 	ClientWeaponSettingsData.bTranslocatorUseClientSideAnimations = Settings.bTranslocatorUseClientSideAnimations;
 
@@ -1207,6 +1308,7 @@ event Possess()
 		IGPlus_AlwaysRenderDroppedFlags = zzUTPure.Settings.bAlwaysRenderDroppedFlags;
 		IGPlus_UseFastWeaponSwitch = zzUTPure.Settings.bUseFastWeaponSwitch;
 		IGPlus_EnableInputReplication = zzUTPure.Settings.bEnableInputReplication;
+		IGPlus_EnableSnapshotInterpolation = zzUTPure.Settings.bEnableSnapshotInterpolation;
 
 		bEnableDamageDebugMode = zzUTPure.Settings.bEnableDamageDebugMode;
 		bEnableDamageDebugConsoleMessages = zzUTPure.Settings.bEnableDamageDebugConsoleMessages;
@@ -1565,6 +1667,9 @@ event PlayerTick( float Time )
 
 simulated function ClientDemoMessage(coerce string S, optional name Type, optional bool bBeep)
 {
+	if (Settings != none && !Settings.bDemoShowClientMessages)
+		return;
+	
 	if (S == zzPrevClientMessage)
 		return;
 	ClientMessage(S, Type, bBeep);
@@ -1984,6 +2089,8 @@ simulated function xxPureCAP(float TimeStamp, name newState, int MiscData, vecto
 {
 	local Decoration Carried;
 	local vector OldLoc;
+	local bool bOldCollWorld;
+	local bool bOldActCol, bOldBlockAct, bOldBlockPlayer;
 
 	if (bDeleteMe)
 		return;
@@ -2027,7 +2134,15 @@ simulated function xxPureCAP(float TimeStamp, name newState, int MiscData, vecto
 	OldLoc = Location;
 
 	bCanTeleport = false;
+	bOldActCol = bCollideActors;
+	bOldBlockAct = bBlockActors;
+	bOldBlockPlayer = bBlockPlayers;
+	bOldCollWorld = bCollideWorld;
+	bCollideWorld = false;
+	SetCollision(false, false, false);
 	SetLocation(NewLoc);
+	bCollideWorld = bOldCollWorld;
+	SetCollision(bOldActCol, bOldBlockAct, bOldBlockPlayer);
 	bCanTeleport = true;
 	Velocity = NewVel;
 
@@ -2196,6 +2311,17 @@ function ClientUpdatePositionWithInput() {
 	local vector PostAdjustLocation;
 	local rotator SavedViewRotation;
 
+	local bool RealDodging;
+	local EDodgeDir RealDodgeDir;
+	local float RealDodgeClickTimer;
+
+	// These variables may have been changed due to xxPureCAP forcing our State
+	// to change. We need to preserve the new values, otherwise respawns will
+	// desync.
+	RealDodging = bDodging;
+	RealDodgeDir = DodgeDir;
+	RealDodgeClickTimer = DodgeClickTimer;
+
 	bUpdatePosition = false;
 	bRealJump = bPressedJump;
 	bUpdating = true;
@@ -2248,6 +2374,10 @@ function ClientUpdatePositionWithInput() {
 	bPressedJump = bRealJump;
 	zzbFakeUpdate = true;
 
+	bDodging = RealDodging;
+	DodgeDir = RealDodgeDir;
+	DodgeClickTimer = RealDodgeClickTimer;
+
 	UpdatePing();
 }
 
@@ -2276,14 +2406,11 @@ function TakeFallingDamage()
 			MakeNoise(-0.5 * Velocity.Z/(FMax(JumpZ, 150.0)));
 		if (Velocity.Z <= -750 - JumpZ)
 		{
-			if (Velocity.Z <= -750 - JumpZ)
-			{
-				if ( (Velocity.Z < -1650 - JumpZ) && (ReducedDamageType != 'All') )
-					TakeDamage(1000, None, Location, vect(0,0,0), 'Fell');
-				else if ( Role == ROLE_Authority )
-					TakeDamage(-0.15 * (Velocity.Z + 700 + JumpZ), None, Location, vect(0,0,0), 'Fell');
-				ShakeView(0.175 - 0.00007 * Velocity.Z, -0.85 * Velocity.Z, -0.002 * Velocity.Z);
-			}
+			if ( (Velocity.Z < -1650 - JumpZ) && (ReducedDamageType != 'All') )
+				TakeDamage(1000, None, Location, vect(0,0,0), 'Fell');
+			else if ( Role == ROLE_Authority )
+				TakeDamage(-0.15 * (Velocity.Z + 700 + JumpZ), None, Location, vect(0,0,0), 'Fell');
+			ShakeView(0.175 - 0.00007 * Velocity.Z, -0.85 * Velocity.Z, -0.002 * Velocity.Z);
 		}
 	}
 	else if ( Velocity.Z > 0.5 * Default.JumpZ )
@@ -2454,6 +2581,17 @@ function ClearLastServerMoveParams() {
 }
 
 function IGPlus_ProcessRemoteMovement() {
+	if (IGPlus_DeferredWeaponSwitch) {
+		// Deferred fast switch is loose-check-only. If loose check is disabled,
+		// clear any stale deferred switch flag without applying it.
+		if (zzUTPure != None &&
+			zzUTPure.Settings.bEnableLoosePositionCheck &&
+			IGPlus_UseFastWeaponSwitch &&
+			PendingWeapon != None)
+			ChangedWeapon();
+		IGPlus_DeferredWeaponSwitch = false;
+	}
+
 	IGPlus_ApplyAllServerMoves();
 
 	if (IGPlus_EnableInputReplication)
@@ -2498,6 +2636,34 @@ function IGPlus_ApplyMomentum(vector Momentum) {
 		Momentum.Z *= 0.5;
 
 	Velocity += Momentum;
+}
+
+simulated function float GetMoverFireZOffset(optional bool bFullPing) {
+	local float Latency;
+	local float TargetTimeStamp;
+	local ST_MoverDummy MD;
+	local vector HistoricalLoc;
+
+	if (Mover(Base) == None || PlayerReplicationInfo == None)
+		return 0.0;
+
+	if (bFullPing)
+		Latency = PlayerReplicationInfo.Ping * 0.001 * Level.TimeDilation;
+	else
+		Latency = PlayerReplicationInfo.Ping * 0.0005 * Level.TimeDilation;
+
+	if (zzUTPure != None) {
+		MD = zzUTPure.FindMoverDummy(Mover(Base));
+		if (MD != None) {
+			TargetTimeStamp = Level.TimeSeconds - Latency;
+			HistoricalLoc = MD.GetHistoricalLocation(TargetTimeStamp);
+			ClientDebugMessage("MoverZOffset: history="$int(Base.Location.Z - HistoricalLoc.Z)$" linear="$int(Base.Velocity.Z * Latency)$" ping="$PlayerReplicationInfo.Ping$" velZ="$int(Base.Velocity.Z));
+			return Base.Location.Z - HistoricalLoc.Z;
+		}
+	}
+
+	ClientDebugMessage("MoverZOffset: fallback linear="$int(Base.Velocity.Z * Latency)$" ping="$PlayerReplicationInfo.Ping);
+	return Base.Velocity.Z * Latency;
 }
 
 function IGPlus_BeforeTranslocate() {
@@ -2687,8 +2853,13 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 		}
 	}
 
-	if (IGPlus_UseFastWeaponSwitch && PendingWeapon != None)
-		ChangedWeapon();
+	if (IGPlus_UseFastWeaponSwitch && PendingWeapon != None) {
+		// Defer only for loose-check path to avoid changing standard/input behavior.
+		if (zzUTPure != None && zzUTPure.Settings.bEnableLoosePositionCheck)
+			IGPlus_DeferredWeaponSwitch = true;
+		else
+			ChangedWeapon();
+	}
 
 	CurrentTimeStamp = SM.TimeStamp;
 	ServerTimeStamp = Level.TimeSeconds;
@@ -2763,24 +2934,32 @@ function IGPlus_ApplyServerMove(IGPlus_ServerMove SM) {
 				DoDodge = DODGE_None;
 
 			if (MoveIndex == FireIndex) {
-				if (bFired) {
-					if (bForceFire && (Weapon != None))
-						Weapon.ForceFire();
-					else if (bFire == 0)
-						Fire(0);
-					bFire = 1;
+				if (!IsExplicitFireWeapon()) {
+					if (bFired) {
+						if (bForceFire && (Weapon != None))
+							Weapon.ForceFire();
+						else if (bFire == 0)
+							Fire(0);
+						bFire = 1;
+					} else {
+						bFire = 0;
+					}
 				} else {
 					bFire = 0;
 				}
 			}
 
 			if (MoveIndex == AltFireIndex) {
-				if (bAltFired) {
-					if (bForceAltFire && (Weapon != None))
-						Weapon.ForceAltFire();
-					else if (bAltFire == 0)
-						AltFire(0);
-					bAltFire = 1;
+				if (!IsExplicitAltFireWeapon()) {
+					if (bAltFired) {
+						if (bForceAltFire && (Weapon != None))
+							Weapon.ForceAltFire();
+						else if (bAltFire == 0)
+							AltFire(0);
+						bAltFire = 1;
+					} else {
+						bAltFire = 0;
+					}
 				} else {
 					bAltFire = 0;
 				}
@@ -2872,8 +3051,12 @@ function bool IGPlus_IsCAPNecessary() {
 	local bool bForceUpdate;
 	local bool bCanTraceNewLoc;
 	local bool bMovedToNewLoc;
+	local bool bMoverLooseCheckContext;
+	local bool bAppliedQueuedMomentum;
+	local bool bPreserveServerVelocity;
 	local Decoration Carried;
 	local vector OldLoc;
+	local float LooseCheckCorrectionFactor;
 
 	if (bHaveReceivedServerMove == false)
 		return false;
@@ -2891,10 +3074,12 @@ function bool IGPlus_IsCAPNecessary() {
 	debugClientLocError = ClientLocError;
 
 	// Apply momentum that the client never got around to
+	bAppliedQueuedMomentum = false;
 	while(LastAddVelocityAppliedIndex != LastAddVelocityIndex && AddVelocityCalls[LastAddVelocityAppliedIndex].TimeStamp < ServerTimeStamp) {
 		IGPlus_ApplyMomentum(AddVelocityCalls[LastAddVelocityAppliedIndex].Momentum);
 		AddVelocityCalls[LastAddVelocityAppliedIndex].Momentum = vect(0,0,0);
 		zzbForceUpdate = true;
+		bAppliedQueuedMomentum = true;
 		LastAddVelocityAppliedIndex = (LastAddVelocityAppliedIndex+1) & 0xF;
 	}
 
@@ -2925,6 +3110,13 @@ function bool IGPlus_IsCAPNecessary() {
 		// extending ignore time until landing (probably from a lift jump)
 		zzIgnoreUpdateUntil = ServerTimeStamp;
 	}
+	bMoverLooseCheckContext =
+		bServerOnMover ||
+		bClientOnMover ||
+		(Physics == PHYS_Falling && zzIgnoreUpdateUntil >= ServerTimeStamp);
+	LooseCheckCorrectionFactor = zzUTPure.Settings.LooseCheckCorrectionFactor;
+	if (bMoverLooseCheckContext)
+		LooseCheckCorrectionFactor = zzUTPure.Settings.LooseCheckCorrectionFactorOnMover;
 
 	bForceUpdate = 
 		zzbForceUpdate ||
@@ -2943,17 +3135,28 @@ function bool IGPlus_IsCAPNecessary() {
 	if (ClientLocError < MinLocError && bForceUpdate == false)
 		return false;
 
-	if (bForceUpdate || (ClientLocError > MaxLocError && zzIgnoreUpdateUntil < ServerTimeStamp)) {
+	if (bForceUpdate) {
 		ClientDebugMessage("Send CAP:"@CurrentTimeStamp@Physics@ClientPhysics@ClientLocError@MaxLocError);
 		return true;
 	}
+
+	if (ClientLocError > MaxLocError && zzIgnoreUpdateUntil < ServerTimeStamp) {
+		ClientDebugMessage("Send CAP:"@CurrentTimeStamp@Physics@ClientPhysics@ClientLocError@MaxLocError);
+		return true;
+	}
+
+	if (LooseCheckCorrectionFactor < 1.0)
+		ClientLocAbs = Location + (ClientLocAbs - Location) * LooseCheckCorrectionFactor;
+
+	// Keep server-side knockback velocity authoritative for a short window.
+	bPreserveServerVelocity = bAppliedQueuedMomentum || (zzIgnoreUpdateUntil >= ServerTimeStamp);
 
 	bCanTraceNewLoc = FastTrace(ClientLocAbs);
 	if (bCanTraceNewLoc) {
 		clientForcedPosition = ClientLocAbs;
 		zzLastClientErr = 0;
 		bMovedToNewLoc = xxNewMoveSmooth(ClientLocAbs);
-		if (bMovedToNewLoc && ClientPhysics == Physics)
+		if (bMovedToNewLoc && ClientPhysics == Physics && !bPreserveServerVelocity)
 			Velocity = ClientVel;
 	}
 	if (bCanTraceNewLoc == false) {
@@ -2961,7 +3164,7 @@ function bool IGPlus_IsCAPNecessary() {
 		OldLoc = Location;
 
 		bCanTeleport = false;
-		if (SetLocation(ClientLocAbs) && ClientPhysics == Physics)
+		if (SetLocation(ClientLocAbs) && ClientPhysics == Physics && !bPreserveServerVelocity)
 			Velocity = ClientVel;
 		bCanTeleport = true;
 
@@ -3581,6 +3784,37 @@ function bool xxWeaponIsNewNet( optional bool bAlt )
 	);
 }
 
+function bool IsExplicitFireWeapon() {
+	local WeaponSettingsRepl WS;
+
+	if (Weapon == None)
+		return false;
+	WS = GetWeaponSettings();
+	if (WS == None)
+		return false;
+	if (Weapon.IsA('ST_ShockRifle')) return WS.bEnablePingCompensation;
+	if (Weapon.IsA('ST_UT_FlakCannon')) return WS.FlakCompensatePing;
+	if (Weapon.IsA('ST_ripper')) return WS.RipperCompensatePing;
+	if (Weapon.IsA('ST_UT_Eightball')) return WS.RocketCompensatePing;
+	if (Weapon.IsA('ST_ut_biorifle')) return WS.BioCompensatePing;
+	return false;
+}
+
+function bool IsExplicitAltFireWeapon() {
+	local WeaponSettingsRepl WS;
+
+	if (Weapon == None)
+		return false;
+	WS = GetWeaponSettings();
+	if (WS == None)
+		return false;
+	if (Weapon.IsA('ST_ShockRifle')) return WS.bEnablePingCompensation;
+	if (Weapon.IsA('ST_UT_FlakCannon')) return WS.FlakCompensatePing;
+	if (Weapon.IsA('ST_ripper')) return WS.RipperCompensatePing;
+	if (Weapon.IsA('ST_UT_Eightball')) return WS.RocketCompensatePing;
+	return false;
+}
+
 simulated function actor NN_TraceShot(out vector HitLocation, out vector HitNormal, vector EndTrace, vector StartTrace, Pawn TheOwner)
 {
 	local vector realHit;
@@ -3603,6 +3837,169 @@ simulated function actor NN_TraceShot(out vector HitLocation, out vector HitNorm
 		xxDisableCarcasses();
 	}
 	return Other;
+}
+
+function bool IGPlus_LineIntersectsCylinder(
+	vector Start,
+	vector End,
+	vector CylinderCenter,
+	float Radius,
+	float HalfHeight
+) {
+	local vector ClosestPoint, LineDelta, ToCenter;
+	local float LineLengthSq, T, DistXYSq, DistZ;
+
+	LineDelta = End - Start;
+	LineLengthSq = LineDelta dot LineDelta;
+	if (LineLengthSq < 0.000001)
+		return false;
+
+	ToCenter = CylinderCenter - Start;
+	T = (ToCenter dot LineDelta) / LineLengthSq;
+	T = FClamp(T, 0.0, 1.0);
+
+	ClosestPoint = Start + LineDelta * T;
+
+	DistXYSq =
+		(ClosestPoint.X - CylinderCenter.X) * (ClosestPoint.X - CylinderCenter.X) +
+		(ClosestPoint.Y - CylinderCenter.Y) * (ClosestPoint.Y - CylinderCenter.Y);
+	DistZ = Abs(ClosestPoint.Z - CylinderCenter.Z);
+
+	return (DistXYSq <= Radius * Radius && DistZ <= HalfHeight);
+}
+
+function bool IGPlus_PointInsideCylinder(
+	vector P,
+	vector CylinderCenter,
+	float Radius,
+	float HalfHeight
+) {
+	local float DistXYSq;
+
+	DistXYSq =
+		(P.X - CylinderCenter.X) * (P.X - CylinderCenter.X) +
+		(P.Y - CylinderCenter.Y) * (P.Y - CylinderCenter.Y);
+	return (DistXYSq <= Radius * Radius && Abs(P.Z - CylinderCenter.Z) <= HalfHeight);
+}
+
+function bool IGPlus_IsTraceBlockedByTargetMover(
+	UTPlusDummy TargetDummy,
+	vector StartTrace,
+	vector HitLocation
+) {
+	local Mover BaseMover;
+	local vector HistoricalMoverLoc;
+
+	if (TargetDummy == None || TargetDummy.Actual == None)
+		return false;
+
+	BaseMover = Mover(TargetDummy.Actual.Base);
+	if (BaseMover == None)
+		return false;
+
+	// Same-base shots should not be blocked by this protection.
+	if (Base == BaseMover)
+		return false;
+
+	HistoricalMoverLoc = BaseMover.Location;
+	IGPlus_GetHistoricalMoverLocation(BaseMover, HistoricalMoverLoc);
+
+	// Only guard "from below through mover" shots.
+	if (StartTrace.Z >= HistoricalMoverLoc.Z || HitLocation.Z <= HistoricalMoverLoc.Z)
+		return false;
+
+	return IGPlus_LineIntersectsCylinder(
+		StartTrace,
+		HitLocation,
+		HistoricalMoverLoc,
+		BaseMover.CollisionRadius,
+		BaseMover.CollisionHeight
+	);
+}
+
+function float IGPlus_GetLatencyMs(optional bool bOneWay) {
+	local float PingMs;
+
+	if (PingAverage > 0)
+		PingMs = float(PingAverage);
+	else if (PlayerReplicationInfo != None && PlayerReplicationInfo.Ping > 0)
+		PingMs = float(PlayerReplicationInfo.Ping);
+
+	if (bOneWay)
+		return FMax(0.0, 0.5 * PingMs);
+	return FMax(0.0, PingMs);
+}
+
+function float IGPlus_GetOneWayLatencyMs() {
+	return IGPlus_GetLatencyMs(true);
+}
+
+function bool IGPlus_GetHistoricalMoverLocationByLatency(
+	Mover M,
+	float SampleLatencyMs,
+	out vector HistoricalMoverLoc
+) {
+	local ST_MoverDummy MD;
+	local float TargetTimeStamp;
+
+	if (M == None || zzUTPure == None || SampleLatencyMs <= 0.0)
+		return false;
+
+	MD = zzUTPure.FindMoverDummy(M);
+	if (MD == None)
+		return false;
+
+	TargetTimeStamp = Level.TimeSeconds - 0.001 * SampleLatencyMs * Level.TimeDilation;
+	HistoricalMoverLoc = MD.GetHistoricalLocation(TargetTimeStamp);
+	return true;
+}
+
+function bool IGPlus_ShouldIgnoreOwnBaseHit(
+	vector StartTrace,
+	vector HitLocation
+) {
+	local Mover BaseMover;
+	local vector HistoricalMoverLoc;
+	local bool bHasHistorical;
+	local vector ShotDir;
+	local float SampleLatencyMs;
+
+	BaseMover = Mover(Base);
+	if (BaseMover == None)
+		return false;
+
+	// Self-base occlusion should match shooter view time (one-way latency).
+	SampleLatencyMs = IGPlus_GetOneWayLatencyMs();
+	bHasHistorical = IGPlus_GetHistoricalMoverLocationByLatency(BaseMover, SampleLatencyMs, HistoricalMoverLoc);
+	if (!bHasHistorical)
+		return false;
+
+	ShotDir = Normal(HitLocation - StartTrace);
+	if (ShotDir.Z >= 0.0 &&
+		IGPlus_PointInsideCylinder(
+			StartTrace,
+			HistoricalMoverLoc,
+			BaseMover.CollisionRadius,
+			BaseMover.CollisionHeight
+		)
+	) {
+		return true;
+	}
+
+	// Ignore a self-base hit only if the shot segment does not intersect the
+	// mover at the same historical rewind frame.
+	return !IGPlus_LineIntersectsCylinder(
+		StartTrace,
+		HitLocation,
+		HistoricalMoverLoc,
+		BaseMover.CollisionRadius,
+		BaseMover.CollisionHeight
+	);
+}
+
+function bool IGPlus_GetHistoricalMoverLocation(Mover M, out vector HistoricalMoverLoc) {
+	// Target mover blocking uses the full compensation timeline.
+	return IGPlus_GetHistoricalMoverLocationByLatency(M, IGPlus_GetLatencyMs(false), HistoricalMoverLoc);
 }
 
 function Actor TraceShot(out vector HitLocation, out vector HitNormal, vector EndTrace, vector StartTrace)
@@ -3631,15 +4028,17 @@ function Actor TraceShot(out vector HitLocation, out vector HitNormal, vector En
 				continue;
 			}
 
-			if (A.IsA('UTPlusDummy')) {
-				D = UTPlusDummy(A);
-				if (D != none && D.Actual != none && D.Actual != self) {
-					if (D.AdjustHitLocation(HitLocation, EndTrace - StartTrace)) {
-						Other = D.Actual;
-						break;
+				if (A.IsA('UTPlusDummy')) {
+					D = UTPlusDummy(A);
+					if (D != none && D.Actual != none && D.Actual != self) {
+						if (D.AdjustHitLocation(HitLocation, EndTrace - StartTrace)) {
+							if (IGPlus_IsTraceBlockedByTargetMover(D, StartTrace, HitLocation))
+								continue;
+							Other = D.Actual;
+							break;
+						}
 					}
 				}
-			}
 			else if (A.IsA('ST_ProjectileDummy')) {
 				PD = ST_ProjectileDummy(A);
 				if (PD.Actual != None) {
@@ -3654,12 +4053,14 @@ function Actor TraceShot(out vector HitLocation, out vector HitNormal, vector En
 						break;
 					}
 				}
-			} else if ((A == Level) || (Mover(A) != None) || A.bProjTarget || (A.bBlockPlayers && A.bBlockActors)) {
-				if (bSProjBlocks || !A.IsA('ShockProj') || bWeaponShock) {
-					Other = A;
-					break;
+				} else if ((A == Level) || (Mover(A) != None) || A.bProjTarget || (A.bBlockPlayers && A.bBlockActors)) {
+					if (A == Base && Mover(A) != None && IGPlus_ShouldIgnoreOwnBaseHit(StartTrace, HitLocation))
+						continue;
+					if (bSProjBlocks || !A.IsA('ShockProj') || bWeaponShock) {
+						Other = A;
+						break;
+					}
 				}
-			}
 			if (Other != none)
 				break;
 		}
@@ -4118,32 +4519,41 @@ function PlayBackInput(IGPlus_SavedInput Old, IGPlus_SavedInput I) {
 			}
 		}
 
-		if (I.bLive == false) {
+		if (Old.bLive == false) {
+			bDodging = false;
 			DodgeDir = DODGE_None;
 			DodgeClickTimer = DodgeClickTime;
 		}
 
 		// handle firing and alt-firing on server
-		if (I.bFire) {
-			if (bFire == 0) {
-				if (I.bLive && I.bFFir && Weapon != none)
-					Weapon.ForceFire();
-				else
-					Fire(0);
+		if (!IsExplicitFireWeapon()) {
+			if (I.bFire) {
+				if (bFire == 0) {
+					if (I.bLive && I.bFFir && Weapon != none)
+						Weapon.ForceFire();
+					else
+						Fire(0);
+				}
+				bFire = 1;
+			} else {
+				bFire = 0;
 			}
-			bFire = 1;
 		} else {
 			bFire = 0;
 		}
 
-		if (I.bAFir) {
-			if (bAltFire == 0) {
-				if (I.bLive && I.bFAFr && Weapon != none)
-					Weapon.ForceAltFire();
-				else
-					AltFire(0);
+		if (!IsExplicitAltFireWeapon()) {
+			if (I.bAFir) {
+				if (bAltFire == 0) {
+					if (I.bLive && I.bFAFr && Weapon != none)
+						Weapon.ForceAltFire();
+					else
+						AltFire(0);
+				}
+				bAltFire = 1;
+			} else {
+				bAltFire = 0;
 			}
-			bAltFire = 1;
 		} else {
 			bAltFire = 0;
 		}
@@ -4161,8 +4571,6 @@ function PlayBackInput(IGPlus_SavedInput Old, IGPlus_SavedInput I) {
 	}
 
 	ViewRotation = I.SavedViewRotation;
-
-	// 
 
 	IGPlus_TPFix_LastTouched = none;
 	HandleWalking();
@@ -4877,7 +5285,7 @@ exec function EnableClientSideAnimations() {
         ForcedSettingsInfo = ForcedSettingsInfo $ " Ripper (Forced:" $ ForcedValue $ "),";
     }
 
-    // --- Flak ---
+	// --- Flak ---
     ForcedValue = GetForcedSettingValue("bFlakUseClientSideAnimations");
     if (ForcedValue == "") {
         if (!Settings.bFlakUseClientSideAnimations) {
@@ -4888,6 +5296,19 @@ exec function EnableClientSideAnimations() {
         }
     } else {
         ForcedSettingsInfo = ForcedSettingsInfo $ " Flak (Forced:" $ ForcedValue $ "),";
+    }
+
+	// --- Rocket ---
+    ForcedValue = GetForcedSettingValue("bRocketUseClientSideAnimations");
+    if (ForcedValue == "") {
+        if (!Settings.bRocketUseClientSideAnimations) {
+            Settings.bRocketUseClientSideAnimations = true;
+            ClientWeaponSettingsData.bRocketUseClientSideAnimations = true;
+            UpdatedSettings = UpdatedSettings $ " Rocket,";
+            bMadeChanges = true;
+        }
+    } else {
+        ForcedSettingsInfo = ForcedSettingsInfo $ " Rocket (Forced:" $ ForcedValue $ "),";
     }
 
     // --- Sniper ---
@@ -5003,7 +5424,7 @@ exec function DisableClientSideAnimations() {
         ForcedSettingsInfo = ForcedSettingsInfo $ " Ripper (Forced:" $ ForcedValue $ "),";
     }
 
-    // --- Flak ---
+	// --- Flak ---
     ForcedValue = GetForcedSettingValue("bFlakUseClientSideAnimations");
     if (ForcedValue == "") {
         if (Settings.bFlakUseClientSideAnimations) {
@@ -5014,6 +5435,19 @@ exec function DisableClientSideAnimations() {
         }
     } else {
         ForcedSettingsInfo = ForcedSettingsInfo $ " Flak (Forced:" $ ForcedValue $ "),";
+    }
+
+	// --- Rocket ---
+    ForcedValue = GetForcedSettingValue("bRocketUseClientSideAnimations");
+    if (ForcedValue == "") {
+        if (Settings.bRocketUseClientSideAnimations) {
+            Settings.bRocketUseClientSideAnimations = false;
+            ClientWeaponSettingsData.bRocketUseClientSideAnimations = false;
+            UpdatedSettings = UpdatedSettings $ " Rocket,";
+            bMadeChanges = true;
+        }
+    } else {
+        ForcedSettingsInfo = ForcedSettingsInfo $ " Rocket (Forced:" $ ForcedValue $ "),";
     }
 
     // --- Sniper ---
@@ -5072,6 +5506,8 @@ simulated function UpdateReplicatedWeaponSetting(string Key, bool bValue) {
         ClientWeaponSettingsData.bRipperUseClientSideAnimations = bValue;
     } else if (Key ~= "bFlakUseClientSideAnimations") {
         ClientWeaponSettingsData.bFlakUseClientSideAnimations = bValue;
+    } else if (Key ~= "bRocketUseClientSideAnimations") {
+        ClientWeaponSettingsData.bRocketUseClientSideAnimations = bValue;
     } else if (Key ~= "bSniperUseClientSideAnimations") {
         ClientWeaponSettingsData.bSniperUseClientSideAnimations = bValue;
     } else if (Key ~= "bTranslocatorUseClientSideAnimations") {
@@ -5258,6 +5694,35 @@ exec function FlakClientSideAnimations(bool b) {
 	else
 		ClientMessage("Flak client-side animations disabled!", 'IGPlus');
 }
+
+exec function RocketClientSideAnimations(bool b) {
+    local string ForcedValue;
+
+    ForcedValue = GetForcedSettingValue("bRocketUseClientSideAnimations");
+	if (ForcedValue != "") {
+        ClientMessage("Cannot change Rocket animations: Setting is forced by the server to '" $ ForcedValue $ "'.", 'IGPlus');
+        return;
+    }
+
+	if (Settings.bRocketUseClientSideAnimations == b) {
+		if (b)
+			ClientMessage("Rocket client-side animations are already enabled.", 'IGPlus');
+		else
+			ClientMessage("Rocket client-side animations are already disabled.", 'IGPlus');
+		return;
+	}
+
+	Settings.bRocketUseClientSideAnimations = b;
+	ClientWeaponSettingsData.bRocketUseClientSideAnimations = b;
+
+	IGPlus_SaveSettings();
+
+	if (b)
+		ClientMessage("Rocket client-side animations enabled!", 'IGPlus');
+	else
+		ClientMessage("Rocket client-side animations disabled!", 'IGPlus');
+}
+
 
 exec function SniperClientSideAnimations(bool b) {
     local string ForcedValue;
@@ -5648,6 +6113,9 @@ simulated function AddVelocity( vector NewVelocity )
 
 simulated function ClientAddMomentum(vector Momentum, float TimeStamp, int Index) {
 	local int Next;
+	if (TimeStamp <= CurrentTimeStamp)
+		return; // CAP/state already advanced past this momentum timestamp
+
 	if (TimeStamp <= AddVelocityCalls[LastAddVelocityIndex].TimeStamp)
 		return; // too old
 
@@ -5661,6 +6129,7 @@ simulated function ClientAddMomentum(vector Momentum, float TimeStamp, int Index
 
 function ServerAddMomentum(vector Momentum) {
 	local int Next;
+	local int AddIndex;
 
 	if (zzUTPure.Settings.bEnableLoosePositionCheck) {
 		if (Momentum == vect(0,0,0))
@@ -5670,11 +6139,18 @@ function ServerAddMomentum(vector Momentum) {
 		if (Next == LastAddVelocityAppliedIndex)
 			return; // full
 
-		AddVelocityCalls[LastAddVelocityIndex].Momentum = Momentum;
-		AddVelocityCalls[LastAddVelocityIndex].TimeStamp = Level.TimeSeconds + 0.5*Level.TimeDilation;
-		ClientAddMomentum(Momentum, Level.TimeSeconds, LastAddVelocityIndex);
+		AddIndex = LastAddVelocityIndex;
+
+		AddVelocityCalls[AddIndex].Momentum = Momentum;
+		AddVelocityCalls[AddIndex].TimeStamp = Level.TimeSeconds;
+		ClientAddMomentum(Momentum, Level.TimeSeconds, AddIndex);
+
+		IGPlus_ApplyMomentum(Momentum);
+		AddVelocityCalls[AddIndex].Momentum = vect(0,0,0);
+		zzIgnoreUpdateUntil = FMax(zzIgnoreUpdateUntil, Level.TimeSeconds + PlayerReplicationInfo.Ping * 0.001 * Level.TimeDilation);
 
 		LastAddVelocityIndex = Next;
+		LastAddVelocityAppliedIndex = Next;
 	} else {
 		if (Physics == PHYS_Walking)
 			Momentum.Z = FMax(Momentum.Z, 0.4 * VSize(Momentum));
@@ -6157,14 +6633,129 @@ function Died(pawn Killer, name damageType, vector HitLocation)
 }
 
 event ServerTick(float DeltaTime) {
+	local bool bSendSnapshot;
+	local bool bHardSnap;
+	local bool bOnMover;
+	local byte SnapshotIntentBits;
+	local byte SnapshotDodgeDir;
+	local byte SnapshotPhysics;
+	local float SnapshotDeltaTime;
+	local float SnapshotSendHz;
+	local float SnapshotInterval;
+
 	AverageServerDeltaTime = (AverageServerDeltaTime*99 + DeltaTime) * 0.01;
 	IGPlus_ProcessRemoteMovement();
 	xxRememberPosition();
+	IGPlus_UpdateServerSnapInterpDelayEstimate();
 
-	if (IGPlus_WarpFixUpdate && IGPlus_EnableWarpFix) {
-		IGPlus_WarpFixData.OldLocation = Location;
-		IGPlus_WarpFixData.Counter += 1;
+	if (IGPlus_EnableSnapshotInterpolation) {
+		SnapshotSendHz = 30.0;
+		if (zzUTPure != None && zzUTPure.Settings.SnapshotInterpSendHz > 0.0)
+			SnapshotSendHz = zzUTPure.Settings.SnapshotInterpSendHz;
+		SnapshotInterval = 1.0 / FMax(SnapshotSendHz, 1.0);
+
+		if (IGPlus_SnapInterp_ServerNextTime <= 0)
+			IGPlus_SnapInterp_ServerNextTime = Level.TimeSeconds;
+
+		bSendSnapshot = Level.TimeSeconds >= IGPlus_SnapInterp_ServerNextTime;
+		if (bSendSnapshot) {
+			bHardSnap = false;
+			if (IGPlus_SnapInterp_ServerHasLast) {
+				SnapshotDeltaTime = FMax(Level.TimeSeconds - IGPlus_SnapInterp_ServerLastTime, 0.016);
+				if (VSize(Location - IGPlus_SnapInterp_ServerLastLocation) > 3000.0 * SnapshotDeltaTime)
+					bHardSnap = true;
+			} else {
+				bHardSnap = true;
+			}
+
+				bOnMover = Mover(Base) != none;
+				IGPlus_SnapReplicatedDataPrev = IGPlus_SnapReplicatedData;
+					IGPlus_SnapReplicatedData.Location = Location;
+					IGPlus_SnapReplicatedData.Velocity = Velocity;
+					IGPlus_SnapReplicatedData.Rotation = Rotation;
+					IGPlus_SnapReplicatedData.Rotation.Roll = 0;
+					IGPlus_SnapReplicatedData.AnimSequence = AnimSequence;
+					IGPlus_SnapReplicatedData.AnimFrameByte = byte(FClamp(AnimFrame * 255.0, 0.0, 255.0));
+					SnapshotIntentBits = 0;
+					if (bIsCrouching || DuckFraction > 0.25)
+						SnapshotIntentBits = SnapshotIntentBits | 1;
+					if (bDodging || DodgeDir == DODGE_Active)
+						SnapshotIntentBits = SnapshotIntentBits | 2;
+
+					SnapshotDodgeDir = 0;
+					if (DodgeDir == DODGE_Left)
+						SnapshotDodgeDir = 1;
+					else if (DodgeDir == DODGE_Right)
+						SnapshotDodgeDir = 2;
+					else if (DodgeDir == DODGE_Forward)
+						SnapshotDodgeDir = 3;
+					else if (DodgeDir == DODGE_Back)
+						SnapshotDodgeDir = 4;
+					else if (DodgeDir == DODGE_Active) {
+						if (AnimSequence == 'DodgeL')
+							SnapshotDodgeDir = 1;
+						else if (AnimSequence == 'DodgeR')
+							SnapshotDodgeDir = 2;
+						else if (AnimSequence == 'DodgeB')
+							SnapshotDodgeDir = 4;
+						else if (AnimSequence == 'DodgeF' || AnimSequence == 'Flip')
+							SnapshotDodgeDir = 3;
+					}
+					// Bit 2 tags forward dodge visual intent: Flip vs DodgeF.
+					// Keep this strictly source-accurate: set only when the sampled
+					// sequence is actually Flip at snapshot time.
+					if (SnapshotDodgeDir == 3 && AnimSequence == 'Flip')
+						SnapshotIntentBits = SnapshotIntentBits | 4;
+
+					switch (Physics) {
+						case PHYS_None: SnapshotPhysics = 0; break;
+						case PHYS_Walking: SnapshotPhysics = 1; break;
+						case PHYS_Falling: SnapshotPhysics = 2; break;
+						case PHYS_Swimming: SnapshotPhysics = 3; break;
+						case PHYS_Flying: SnapshotPhysics = 4; break;
+						case PHYS_Rotating: SnapshotPhysics = 5; break;
+						case PHYS_Projectile: SnapshotPhysics = 6; break;
+						case PHYS_Rolling: SnapshotPhysics = 7; break;
+						case PHYS_Interpolating: SnapshotPhysics = 8; break;
+						case PHYS_MovingBrush: SnapshotPhysics = 9; break;
+						case PHYS_Spider: SnapshotPhysics = 10; break;
+						case PHYS_Trailer: SnapshotPhysics = 11; break;
+						default: SnapshotPhysics = 0; break;
+					}
+					IGPlus_SnapReplicatedData.AnimIntentBits = SnapshotIntentBits;
+					IGPlus_SnapReplicatedData.AnimDodgeDir = SnapshotDodgeDir;
+					IGPlus_SnapReplicatedData.AnimPhysics = SnapshotPhysics;
+					IGPlus_SnapReplicatedData.Counter += 1;
+					IGPlus_SnapReplicatedData.bHardSnap = bHardSnap;
+					IGPlus_SnapReplicatedData.bBasedOnMover = bOnMover;
+				if (bOnMover) {
+					IGPlus_SnapReplicatedData.MoverLocation = Base.Location;
+					IGPlus_SnapReplicatedData.BaseMover = Base;
+				} else {
+					IGPlus_SnapReplicatedData.MoverLocation = vect(0,0,0);
+					IGPlus_SnapReplicatedData.BaseMover = None;
+				}
+
+			IGPlus_SnapInterp_ServerLastLocation = Location;
+			IGPlus_SnapInterp_ServerLastTime = Level.TimeSeconds;
+			IGPlus_SnapInterp_ServerHasLast = true;
+
+			while (IGPlus_SnapInterp_ServerNextTime <= Level.TimeSeconds)
+				IGPlus_SnapInterp_ServerNextTime += SnapshotInterval;
+		}
+
+		// Snapshot interpolation uses a fixed send cadence and does not
+		// depend on per-move WarpFix update flags.
 		IGPlus_WarpFixUpdate = false;
+	} else {
+		IGPlus_SnapInterp_ServerNextTime = 0;
+		IGPlus_SnapInterp_ServerHasLast = false;
+
+		if (IGPlus_WarpFixUpdate && IGPlus_EnableWarpFix) {
+			IGPlus_WarpFixData.OldLocation = Location;
+			IGPlus_WarpFixData.Counter += 1;
+			IGPlus_WarpFixUpdate = false;
+		}
 	}
 
 	if (DelayedNavPoint != none) {
@@ -6208,6 +6799,25 @@ event ServerTick(float DeltaTime) {
 
 state FeigningDeath
 {
+	// Fix: Base PlayerPawn.AltFire() incorrectly sets bJustFired instead of bJustAltFired
+	exec function Fire(optional float F)
+	{
+		bJustFired = true;
+	}
+
+	exec function AltFire(optional float F)
+	{
+		bJustAltFired = true;
+	}
+
+	// Fix: Base ProcessMove only checks bJustFired, need to also check bJustAltFired
+	function ProcessMove(float DeltaTime, vector NewAccel, eDodgeDir DodgeMove, rotator DeltaRot)
+	{
+		if (bJustFired || bJustAltFired || bPressedJump || (NewAccel.Z > 0))
+			Rise();
+		Acceleration = vect(0,0,0);
+	}
+
 	function xxServerMove
 	(
 		float TimeStamp,
@@ -6811,7 +7421,9 @@ ignores SeePlayer, HearNoise, Bump;
 		if ( Mesh == None )
 			SetMesh();
 		WalkBob = vect(0,0,0);
+		bDodging = false;
 		DodgeDir = DODGE_None;
+		DodgeClickTimer = DodgeClickTime;
 		bIsCrouching = false;
 		bIsTurning = false;
 		bPressedJump = false;
@@ -7686,7 +8298,7 @@ static function SetForcedSkin(Actor SkinActor, int selectedSkin, bool bTeamGame,
 		case 4: // Female Soldier Marine
 			SetSkinElement(SkinActor, 0, "SGirlSkins.fbth1"$suffix, "SGirlSkins.fbth");
 			SetSkinElement(SkinActor, 1, "SGirlSkins.fbth2"$suffix, "SGirlSkins.fbth");
-			SetSkinElement(SkinActor, 2, "SGirlSkins.fbth3", "SGirkSkins.fbth");
+			SetSkinElement(SkinActor, 2, "SGirlSkins.fbth3", "SGirlSkins.fbth");
 			// Set the face
 			SetSkinElement(SkinActor, 3, "SGirlSkins.fbth4Annaka", "SGirlSkins.fbth");
 			break;
@@ -7899,6 +8511,15 @@ function ApplyBrightskins(PlayerReplicationInfo PRI) {
 		P.Weapon.bUnlit = false;
 }
 
+function bool IGPlus_ShouldUseSnapshotInterpForProxy(optional bbPlayer P) {
+	if (P == none)
+		P = self;
+
+	return P != none &&
+		P.Role == ROLE_SimulatedProxy &&
+		P.IGPlus_EnableSnapshotInterpolation;
+}
+
 function IGPlus_ApplyWarpFix(PlayerReplicationInfo PRI) {
 	local bbPlayer P;
 	if (PRI == PlayerReplicationInfo)
@@ -7911,6 +8532,8 @@ function IGPlus_ApplyWarpFix(PlayerReplicationInfo PRI) {
 		return;
 
 	P = bbPlayer(PRI.Owner);
+	if (IGPlus_ShouldUseSnapshotInterpForProxy(P))
+		return;
 
 	if (Level.Pauser != "") {
 		P.IGPlus_WarpFixClientData.TimeStamp = Level.TimeSeconds;
@@ -7928,6 +8551,211 @@ function IGPlus_ApplyWarpFix(PlayerReplicationInfo PRI) {
 	P.SetLocation(P.IGPlus_WarpFixClientData.Last.OldLocation);
 }
 
+simulated function IGPlus_UpdateClientSnapInterpDelayReport() {
+	local int i;
+	local int j;
+	local int SampleCount;
+	local int MedianDelayMs;
+	local float Sample;
+	local float DelaySamples[32];
+	local PlayerReplicationInfo PRI;
+	local bbPlayer P;
+
+	if (Role != ROLE_AutonomousProxy || Level.NetMode != NM_Client)
+		return;
+
+	if (IGPlus_EnableSnapshotInterpolation == false) {
+		IGPlus_ClientSnapInterpDelayMs = -1;
+		IGPlus_ClientSnapInterpDelaySampleCount = 0;
+		IGPlus_ClientSnapInterpDelayMedianMs = -1;
+		IGPlus_ClientSnapInterpDelaySpreadMs = -1;
+		return;
+	}
+
+	if (Level.TimeSeconds < IGPlus_NextSnapInterpDelayClientReportTime)
+		return;
+
+	IGPlus_NextSnapInterpDelayClientReportTime = Level.TimeSeconds + 0.25;
+	SampleCount = 0;
+
+	if (GameReplicationInfo != None && PlayerReplicationInfo != None) {
+		for (i = 0; i < arraycount(GameReplicationInfo.PRIArray); ++i) {
+			PRI = GameReplicationInfo.PRIArray[i];
+			if (PRI == none)
+				break;
+
+			P = bbPlayer(PRI.Owner);
+			if (P == none || P == self)
+				continue;
+			if (P.Role != ROLE_SimulatedProxy)
+				continue;
+			if (P.IGPlus_EnableSnapshotInterpolation == false)
+				continue;
+			if (P.IGPlus_SnapInterp_Count < 2)
+				continue;
+			if (SampleCount >= arraycount(DelaySamples))
+				break;
+
+			DelaySamples[SampleCount] = FClamp(P.IGPlus_SnapInterp_InterpDelay * 1000.0, 0.0, 200.0);
+			SampleCount++;
+		}
+	}
+
+	if (SampleCount <= 0) {
+		IGPlus_ClientSnapInterpDelayMs = -1;
+		IGPlus_ClientSnapInterpDelaySampleCount = 0;
+		IGPlus_ClientSnapInterpDelayMedianMs = -1;
+		IGPlus_ClientSnapInterpDelaySpreadMs = -1;
+		return;
+	}
+
+	for (i = 1; i < SampleCount; ++i) {
+		Sample = DelaySamples[i];
+		j = i - 1;
+		while (j >= 0 && DelaySamples[j] > Sample) {
+			DelaySamples[j + 1] = DelaySamples[j];
+			j--;
+		}
+		DelaySamples[j + 1] = Sample;
+	}
+
+	if ((SampleCount & 1) == 1)
+		MedianDelayMs = int(DelaySamples[SampleCount / 2]);
+	else
+		MedianDelayMs = int(0.5 * (DelaySamples[(SampleCount / 2) - 1] + DelaySamples[SampleCount / 2]));
+
+	IGPlus_ClientSnapInterpDelaySampleCount = SampleCount;
+	IGPlus_ClientSnapInterpDelayMedianMs = MedianDelayMs;
+	IGPlus_ClientSnapInterpDelaySpreadMs = int(DelaySamples[SampleCount - 1] - DelaySamples[0]);
+	IGPlus_ClientSnapInterpDelayMs = Clamp(MedianDelayMs, 0, 200);
+}
+
+function IGPlus_UpdateServerSnapInterpDelayEstimate() {
+	local float BaselineMs;
+	local float MinAllowedMs;
+	local float MaxAllowedMs;
+	local float ReportedMs;
+	local float SmoothedTargetMs;
+	local float SmoothedDeltaMs;
+	local int MinSampleCount;
+	local int MaxSpreadMs;
+	local float TrustTimeout;
+
+	if (Role != ROLE_Authority)
+		return;
+
+	MinSampleCount = 1;
+	MaxSpreadMs = 35;
+	TrustTimeout = 1.0;
+
+	if (IGPlus_EnableSnapshotInterpolation == false || zzUTPure == None || zzUTPure.Settings == None) {
+		IGPlus_ServerSnapInterpDelayValid = false;
+		IGPlus_ServerSnapInterpTrusted = false;
+		IGPlus_ServerSnapInterpLastAcceptedTime = 0.0;
+		IGPlus_ServerSnapInterpDelayMsSmoothed = 0.0;
+		IGPlus_ServerSnapInterpDelayReportedMsEcho = -1;
+		IGPlus_ServerSnapInterpDelayClampedMsEcho = -1;
+		IGPlus_ServerSnapInterpDelaySmoothedMsEcho = 0;
+		IGPlus_ServerSnapInterpDelayValidEcho = false;
+		IGPlus_ServerSnapInterpTrustedEcho = false;
+		IGPlus_ServerSnapInterpDelayEchoTime = Level.TimeSeconds;
+		IGPlus_ServerSnapInterpLastAcceptedTimeEcho = 0.0;
+		return;
+	}
+
+	if (IGPlus_ServerSnapInterpTrusted &&
+		(Level.TimeSeconds - IGPlus_ServerSnapInterpLastAcceptedTime > TrustTimeout)
+	) {
+		IGPlus_ServerSnapInterpTrusted = false;
+	}
+
+	if (Level.TimeSeconds < IGPlus_NextSnapInterpDelayReportTime)
+		return;
+
+	IGPlus_NextSnapInterpDelayReportTime = Level.TimeSeconds + 0.25;
+	IGPlus_ServerSnapInterpDelayReportedMsEcho = IGPlus_ClientSnapInterpDelayMs;
+	if (IGPlus_ClientSnapInterpDelayMs < 0 ||
+		IGPlus_ClientSnapInterpDelaySampleCount < MinSampleCount ||
+		IGPlus_ClientSnapInterpDelaySpreadMs < 0 ||
+		IGPlus_ClientSnapInterpDelaySpreadMs > MaxSpreadMs
+	) {
+		IGPlus_ServerSnapInterpTrusted = false;
+		IGPlus_ServerSnapInterpDelayClampedMsEcho = -1;
+		IGPlus_ServerSnapInterpDelaySmoothedMsEcho = int(IGPlus_ServerSnapInterpDelayMsSmoothed + 0.5);
+		IGPlus_ServerSnapInterpDelayValidEcho = false;
+		IGPlus_ServerSnapInterpTrustedEcho = false;
+		IGPlus_ServerSnapInterpDelayEchoTime = Level.TimeSeconds;
+		IGPlus_ServerSnapInterpLastAcceptedTimeEcho = IGPlus_ServerSnapInterpLastAcceptedTime;
+		return;
+	}
+
+	BaselineMs = FMax(0.0, zzUTPure.Settings.SnapshotInterpRewindMs);
+	MinAllowedMs = FMax(0.0, BaselineMs - 30.0);
+	MaxAllowedMs = FMin(200.0, BaselineMs + 60.0);
+	ReportedMs = FClamp(float(IGPlus_ClientSnapInterpDelayMs), MinAllowedMs, MaxAllowedMs);
+	IGPlus_ServerSnapInterpDelayClampedMsEcho = int(ReportedMs + 0.5);
+
+	if (IGPlus_ServerSnapInterpDelayValid == false) {
+		IGPlus_ServerSnapInterpDelayMsSmoothed = ReportedMs;
+		IGPlus_ServerSnapInterpDelayValid = true;
+		IGPlus_ServerSnapInterpTrusted = true;
+		IGPlus_ServerSnapInterpLastAcceptedTime = Level.TimeSeconds;
+		IGPlus_ServerSnapInterpDelaySmoothedMsEcho = int(IGPlus_ServerSnapInterpDelayMsSmoothed + 0.5);
+		IGPlus_ServerSnapInterpDelayValidEcho = true;
+		IGPlus_ServerSnapInterpTrustedEcho = true;
+		IGPlus_ServerSnapInterpDelayEchoTime = Level.TimeSeconds;
+		IGPlus_ServerSnapInterpLastAcceptedTimeEcho = IGPlus_ServerSnapInterpLastAcceptedTime;
+		return;
+	}
+
+	SmoothedTargetMs = IGPlus_ServerSnapInterpDelayMsSmoothed + 0.2 * (ReportedMs - IGPlus_ServerSnapInterpDelayMsSmoothed);
+	SmoothedDeltaMs = FClamp(SmoothedTargetMs - IGPlus_ServerSnapInterpDelayMsSmoothed, -10.0, 10.0);
+	IGPlus_ServerSnapInterpDelayMsSmoothed = FClamp(
+		IGPlus_ServerSnapInterpDelayMsSmoothed + SmoothedDeltaMs,
+		MinAllowedMs,
+		MaxAllowedMs
+	);
+	IGPlus_ServerSnapInterpTrusted = true;
+	IGPlus_ServerSnapInterpLastAcceptedTime = Level.TimeSeconds;
+	IGPlus_ServerSnapInterpDelaySmoothedMsEcho = int(IGPlus_ServerSnapInterpDelayMsSmoothed + 0.5);
+	IGPlus_ServerSnapInterpDelayValidEcho = true;
+	IGPlus_ServerSnapInterpTrustedEcho = true;
+	IGPlus_ServerSnapInterpDelayEchoTime = Level.TimeSeconds;
+	IGPlus_ServerSnapInterpLastAcceptedTimeEcho = IGPlus_ServerSnapInterpLastAcceptedTime;
+}
+
+exec simulated function SnapInterpNetStatus(optional string TargetFilter) {
+	local int EchoAgeMs;
+	local int AcceptedAgeMs;
+
+	EchoAgeMs = int((Level.TimeSeconds - IGPlus_ServerSnapInterpDelayEchoTime) * 1000.0);
+	if (EchoAgeMs < 0)
+		EchoAgeMs = 0;
+	AcceptedAgeMs = int((Level.TimeSeconds - IGPlus_ServerSnapInterpLastAcceptedTimeEcho) * 1000.0);
+	if (AcceptedAgeMs < 0)
+		AcceptedAgeMs = 0;
+
+	ClientMessage(
+		"SnapInterpNet client reportMs="$IGPlus_ClientSnapInterpDelayMs$
+		" medianMs="$IGPlus_ClientSnapInterpDelayMedianMs$
+		" samples="$IGPlus_ClientSnapInterpDelaySampleCount$
+		" spreadMs="$IGPlus_ClientSnapInterpDelaySpreadMs$
+		" snapEnabled="$IGPlus_EnableSnapshotInterpolation
+	);
+
+	ClientMessage(
+		"SnapInterpNet server valid="$IGPlus_ServerSnapInterpDelayValidEcho$
+		" trusted="$IGPlus_ServerSnapInterpTrustedEcho$
+		" reportedMs="$IGPlus_ServerSnapInterpDelayReportedMsEcho$
+		" clampedMs="$IGPlus_ServerSnapInterpDelayClampedMsEcho$
+		" smoothedMs="$IGPlus_ServerSnapInterpDelaySmoothedMsEcho$
+		" ageMs="$EchoAgeMs$
+		" acceptedAgeMs="$AcceptedAgeMs
+	);
+
+	SnapInterpStatus(TargetFilter);
+}
+
 event PreRender( canvas zzCanvas )
 {
 	local int i;
@@ -7942,6 +8770,17 @@ event PreRender( canvas zzCanvas )
 	// Tick does not get called when the game is paused, so this is here to
 	// ensure players are visible during pauses
 	IGPlus_LocationOffsetFix_AfterAll(0);
+
+	if (Role == ROLE_AutonomousProxy && Level.NetMode == NM_Client)
+		IGPlus_UpdateClientSnapInterpDelayReport();
+
+	if (IGPlus_SnapInterp_CheckActive && Level.TimeSeconds >= IGPlus_SnapInterp_CheckEndTime)
+		IGPlus_SnapInterp_FinishCheck(false);
+
+	if (IGPlus_SnapInterp_NetDebug && Level.TimeSeconds >= IGPlus_SnapInterp_NetDebugNextTime) {
+		IGPlus_SnapInterp_NetDebugNextTime = Level.TimeSeconds + 1.0;
+		SnapInterpNetStatus();
+	}
 
 	if (GameReplicationInfo != None && PlayerReplicationInfo != None) {
 		for (i = 0; i < arraycount(GameReplicationInfo.PRIArray); ++i) {
@@ -8120,6 +8959,7 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	local float ExtrapolationTime;
 	local bool bReplicatedLocation;
 	local bool bReplicatedVelocity;
+	local bool bMoverTransitionSmoothing;
 	local vector VelXpol;
 	local float CosAlpha;
 	local float SinAlpha;
@@ -8196,16 +9036,28 @@ simulated function IGPlus_LocationOffsetFix_After(float DeltaTime) {
 	if (VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 100 || VSize(Velocity) < 0.0001)
 		IGPlus_LocationOffsetFix_PredictionOffset = vect(0,0,0);
 
+	if (IGPlus_LocationOffsetFix_WasOnMover && IGPlus_LocationOffsetFix_IsOnMover() == false)
+		IGPlus_LocationOffsetFix_MoverTransitionFrames = 4;
+	else if (IGPlus_LocationOffsetFix_MoverTransitionFrames > 0)
+		IGPlus_LocationOffsetFix_MoverTransitionFrames--;
+
+	bMoverTransitionSmoothing = IGPlus_LocationOffsetFix_MoverTransitionFrames > 0;
+
 	// 
 	if (IGPlus_LocationOffsetFix_PredCompatMode) {
-		if (bReplicatedLocation) {
-			if (VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 40)
+		if (bReplicatedLocation || bMoverTransitionSmoothing) {
+			if (bMoverTransitionSmoothing)
+				IGPlus_LocationOffsetFix_PredictionOffset *= 0.96;
+			else if (VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 40)
 				IGPlus_LocationOffsetFix_PredictionOffset *= 0.65;
 			else
 				IGPlus_LocationOffsetFix_PredictionOffset *= 0.85;
 		}
 	} else {
-		IGPlus_LocationOffsetFix_PredictionOffset *= Exp(-25 * DeltaTime);
+		if (bMoverTransitionSmoothing)
+			IGPlus_LocationOffsetFix_PredictionOffset *= Exp(-5 * DeltaTime);
+		else
+			IGPlus_LocationOffsetFix_PredictionOffset *= Exp(-25 * DeltaTime);
 	}
 
 	bCollideWorld = false;
@@ -8249,7 +9101,10 @@ function IGPlus_LocationOffsetFix_AfterAll(float DeltaTime) {
 			if (P == none) continue;
 			if (P.Role != ROLE_SimulatedProxy) continue;
 
-			P.IGPlus_LocationOffsetFix_After(DeltaTime);
+			if (IGPlus_ShouldUseSnapshotInterpForProxy(P))
+				P.IGPlus_SnapInterp_After(DeltaTime);
+			else
+				P.IGPlus_LocationOffsetFix_After(DeltaTime);
 		}
 	}
 
@@ -8264,8 +9119,17 @@ function IGPlus_LocationOffsetFix_AfterAll(float DeltaTime) {
 simulated event Tick(float DeltaTime) {
 	super.Tick(DeltaTime);
 
-	if (Settings.bEnableLocationOffsetFix)
+	// Reset on both enable and disable transitions for simulated proxies.
+	if (Role == ROLE_SimulatedProxy && IGPlus_SnapInterp_EnabledLast != IGPlus_EnableSnapshotInterpolation) {
+		IGPlus_SnapInterp_Reset();
+	}
+
+	if (IGPlus_ShouldUseSnapshotInterpForProxy()) {
+		if (IGPlus_LocationOffsetFix_Moved)
+			IGPlus_SnapInterp_After(DeltaTime);
+	} else if (Settings.bEnableLocationOffsetFix || IGPlus_LocationOffsetFix_Moved) {
 		IGPlus_LocationOffsetFix_After(DeltaTime);
+	}
 }
 
 simulated function IGPlus_LocationOffsetFix_Restore() {
@@ -8390,6 +9254,785 @@ simulated function bool IGPlus_LocationOffsetFix_IsOnGround(out vector HitNormal
 		&& (HitNormal.Z >= 0.7);
 }
 
+simulated function float IGPlus_SnapInterp_GetFallbackInterval() {
+	local float SnapshotSendHz;
+	local bbPlayer LP;
+
+	SnapshotSendHz = 30.0;
+	if (zzUTPure != None && zzUTPure.Settings != None && zzUTPure.Settings.SnapshotInterpSendHz > 0.0)
+		SnapshotSendHz = zzUTPure.Settings.SnapshotInterpSendHz;
+	else {
+		LP = bbPlayer(GetLocalPlayer());
+		if (LP != None &&
+			LP.zzUTPure != None &&
+			LP.zzUTPure.Settings != None &&
+			LP.zzUTPure.Settings.SnapshotInterpSendHz > 0.0
+		) {
+			SnapshotSendHz = LP.zzUTPure.Settings.SnapshotInterpSendHz;
+		}
+	}
+
+	return 1.0 / FMax(SnapshotSendHz, 1.0);
+}
+
+simulated function float IGPlus_SnapInterp_GetExpectedInterval() {
+	return FMax(IGPlus_SnapInterp_MeanInterval, IGPlus_SnapInterp_GetFallbackInterval());
+}
+
+simulated function IGPlus_SnapInterp_UpdateTargetDelay(float ExpectedInterval) {
+	local float TargetDelay;
+	local float DelayDelta;
+
+	ExpectedInterval = FMax(ExpectedInterval, 0.001);
+	TargetDelay = (2.5 * ExpectedInterval) + IGPlus_SnapInterp_JitterEstimate;
+	TargetDelay = FClamp(TargetDelay, 0.020, 0.200);
+	DelayDelta = FClamp(TargetDelay - IGPlus_SnapInterp_InterpDelay, -0.010, 0.020);
+	IGPlus_SnapInterp_InterpDelay = FClamp(IGPlus_SnapInterp_InterpDelay + DelayDelta, 0.020, 0.200);
+}
+
+simulated function IGPlus_SnapInterp_BoostDelayForStress(optional float Scale) {
+	local float ExpectedInterval;
+
+	if (Scale <= 0.0)
+		Scale = 0.5;
+
+	ExpectedInterval = IGPlus_SnapInterp_GetExpectedInterval();
+	IGPlus_SnapInterp_InterpDelay = FMin(0.200, IGPlus_SnapInterp_InterpDelay + Scale * ExpectedInterval);
+}
+
+simulated function IGPlus_SnapInterp_Push(
+	vector Pos,
+	vector Vel,
+	rotator SnapRot,
+	name SnapAnimSeq,
+	byte SnapAnimFrameByte,
+	byte SnapAnimIntentBits,
+	byte SnapAnimDodgeDir,
+	byte SnapAnimPhysics,
+	float SnapTime,
+	float ArrivalTime,
+	optional bool bFromServerMoverState,
+	optional bool bBasedOnMover,
+	optional vector BaseMoverLocation,
+	optional Actor BaseMoverActor,
+	optional bool bUpdateDelayStats
+) {
+	local int BufSize;
+	local int PrevIdx;
+	local float Interval;
+	local float ExpectedInterval;
+	local IGPlus_InterpSnapshot Snap;
+	local IGPlus_InterpSnapshot PrevSnap;
+
+	BufSize = arraycount(IGPlus_SnapInterp_Data);
+
+	if (IGPlus_SnapInterp_Data[IGPlus_SnapInterp_DataIndex] == None)
+		IGPlus_SnapInterp_Data[IGPlus_SnapInterp_DataIndex] = new class'IGPlus_InterpSnapshot';
+
+	Snap = IGPlus_SnapInterp_Data[IGPlus_SnapInterp_DataIndex];
+	Snap.Loc = Pos;
+	Snap.Vel = Vel;
+	Snap.Rot = SnapRot;
+	Snap.Rot.Roll = 0;
+	Snap.AnimSeq = SnapAnimSeq;
+	Snap.AnimFrameByte = SnapAnimFrameByte;
+	Snap.AnimIntentBits = SnapAnimIntentBits;
+	Snap.AnimDodgeDir = SnapAnimDodgeDir;
+	Snap.AnimPhysics = SnapAnimPhysics;
+	Snap.Time = SnapTime;
+	if (bFromServerMoverState) {
+		Snap.bBasedOnMover = bBasedOnMover;
+		if (Snap.bBasedOnMover) {
+			Snap.MoverLoc = BaseMoverLocation;
+			Snap.RelLoc = Pos - BaseMoverLocation;
+			Snap.BaseMover = BaseMoverActor;
+			if (Snap.BaseMover == None) {
+				Snap.bBasedOnMover = false;
+				Snap.RelLoc = vect(0,0,0);
+				Snap.MoverLoc = vect(0,0,0);
+			}
+		} else {
+			Snap.RelLoc = vect(0,0,0);
+			Snap.MoverLoc = vect(0,0,0);
+			Snap.BaseMover = None;
+		}
+	} else {
+		Snap.bBasedOnMover = Mover(Base) != None;
+		if (Snap.bBasedOnMover) {
+			Snap.MoverLoc = Base.Location;
+			Snap.RelLoc = Pos - Base.Location;
+			Snap.BaseMover = Base;
+		} else {
+			Snap.RelLoc = vect(0,0,0);
+			Snap.MoverLoc = vect(0,0,0);
+			Snap.BaseMover = None;
+		}
+	}
+
+	// Teleport detection: if distance to previous snapshot is unreasonably large, reset
+	if (IGPlus_SnapInterp_Count > 0) {
+		PrevIdx = (IGPlus_SnapInterp_DataIndex - 1 + BufSize) % BufSize;
+		PrevSnap = IGPlus_SnapInterp_Data[PrevIdx];
+			if (PrevSnap != None && VSize(Pos - PrevSnap.Loc) > 3000.0 * FMax(SnapTime - PrevSnap.Time, 0.016)) {
+				IGPlus_SnapInterp_Reset();
+				IGPlus_SnapInterp_Data[0] = Snap;
+				IGPlus_SnapInterp_DataIndex = 1 % BufSize;
+				IGPlus_SnapInterp_Count = 1;
+				if (bUpdateDelayStats)
+					IGPlus_SnapInterp_LastArrivalTime = ArrivalTime;
+				return;
+			}
+		}
+
+	IGPlus_SnapInterp_DataIndex = (IGPlus_SnapInterp_DataIndex + 1) % BufSize;
+	if (IGPlus_SnapInterp_Count < BufSize)
+		IGPlus_SnapInterp_Count++;
+
+	// Update adaptive interpolation delay.
+	if (bUpdateDelayStats && IGPlus_SnapInterp_LastArrivalTime > 0) {
+		Interval = ArrivalTime - IGPlus_SnapInterp_LastArrivalTime;
+		if (Interval > 0 && Interval < 1.0) {
+			IGPlus_SnapInterp_MeanInterval += 0.1 * (Interval - IGPlus_SnapInterp_MeanInterval);
+			IGPlus_SnapInterp_JitterEstimate += 0.1 * (Abs(Interval - IGPlus_SnapInterp_MeanInterval) - IGPlus_SnapInterp_JitterEstimate);
+			ExpectedInterval = IGPlus_SnapInterp_GetExpectedInterval();
+			IGPlus_SnapInterp_UpdateTargetDelay(ExpectedInterval);
+		}
+	}
+	if (bUpdateDelayStats)
+		IGPlus_SnapInterp_LastArrivalTime = ArrivalTime;
+}
+
+simulated function int IGPlus_SnapInterp_LerpAxis(int A, int B, float Alpha) {
+	local int AS;
+	local int BS;
+	local int Delta;
+	local int Out;
+
+	AS = Utils.RotU2S(A);
+	BS = Utils.RotU2S(B);
+	Delta = ((BS - AS + 32768) & 65535) - 32768;
+	Out = AS + int(float(Delta) * Alpha);
+	return Utils.RotS2U(Out);
+}
+
+simulated function rotator IGPlus_SnapInterp_LerpRot(rotator A, rotator B, float Alpha) {
+	local rotator R;
+	R.Yaw = IGPlus_SnapInterp_LerpAxis(A.Yaw, B.Yaw, Alpha);
+	R.Pitch = IGPlus_SnapInterp_LerpAxis(A.Pitch, B.Pitch, Alpha);
+	R.Roll = 0;
+	return R;
+}
+
+simulated function bool IGPlus_SnapInterp_Interpolate(
+	float RenderTime,
+	out vector OutPos,
+	out vector OutVel,
+	out rotator OutRot,
+	out name OutAnimSeq,
+	out byte OutAnimFrameByte,
+	out byte OutAnimIntentBits,
+	out byte OutAnimDodgeDir,
+	out byte OutAnimPhysics,
+	out float OutHintTime,
+	out byte InterpMode
+) {
+	local int BufSize;
+	local int Idx, Scans;
+	local IGPlus_InterpSnapshot OlderSnap;
+	local IGPlus_InterpSnapshot NewerSnap;
+	local float TimeDelta, Alpha;
+	local float ExtrapolationTime;
+	local vector MoverOffset;
+
+	InterpMode = 0;
+	OutAnimSeq = '';
+	OutAnimFrameByte = 0;
+	OutAnimIntentBits = 0;
+	OutAnimDodgeDir = 0;
+	OutAnimPhysics = 0;
+	OutHintTime = 0.0;
+
+	if (IGPlus_SnapInterp_Count < 1)
+		return false;
+
+	BufSize = arraycount(IGPlus_SnapInterp_Data);
+	Idx = (IGPlus_SnapInterp_DataIndex - 1 + BufSize) % BufSize;
+	NewerSnap = None;
+
+	for (Scans = 0; Scans < IGPlus_SnapInterp_Count; Scans++) {
+		OlderSnap = IGPlus_SnapInterp_Data[Idx];
+
+		if (OlderSnap != None && OlderSnap.Time > 0) {
+			if (OlderSnap.Time <= RenderTime) {
+				if (NewerSnap != None) {
+					TimeDelta = NewerSnap.Time - OlderSnap.Time;
+					if (TimeDelta > 0.001) {
+						Alpha = (RenderTime - OlderSnap.Time) / TimeDelta;
+						if (Alpha > 1.0) Alpha = 1.0;
+
+						// World-space base interpolation
+						OutPos = OlderSnap.Loc + (NewerSnap.Loc - OlderSnap.Loc) * Alpha;
+
+						// Mover compensation: shifts each on-mover endpoint from its
+						// historical server-sampled mover position to the live client
+						// mover position. Alpha-weighting naturally fades the offset
+						// during mount/dismount transitions, avoiding velocity pops.
+						if (OlderSnap.bBasedOnMover && OlderSnap.BaseMover != None) {
+							MoverOffset = OlderSnap.BaseMover.Location - OlderSnap.MoverLoc;
+							if (VSize(MoverOffset) < 256.0)
+								OutPos += MoverOffset * (1.0 - Alpha);
+						}
+						if (NewerSnap.bBasedOnMover && NewerSnap.BaseMover != None) {
+							MoverOffset = NewerSnap.BaseMover.Location - NewerSnap.MoverLoc;
+							if (VSize(MoverOffset) < 256.0)
+								OutPos += MoverOffset * Alpha;
+						}
+
+							OutVel = OlderSnap.Vel + (NewerSnap.Vel - OlderSnap.Vel) * Alpha;
+							OutRot = IGPlus_SnapInterp_LerpRot(OlderSnap.Rot, NewerSnap.Rot, Alpha);
+							if (Alpha < 0.5) {
+								OutAnimSeq = OlderSnap.AnimSeq;
+								OutAnimFrameByte = OlderSnap.AnimFrameByte;
+								OutAnimIntentBits = OlderSnap.AnimIntentBits;
+								OutAnimDodgeDir = OlderSnap.AnimDodgeDir;
+								OutAnimPhysics = OlderSnap.AnimPhysics;
+								OutHintTime = OlderSnap.Time;
+							} else {
+								OutAnimSeq = NewerSnap.AnimSeq;
+								OutAnimFrameByte = NewerSnap.AnimFrameByte;
+								OutAnimIntentBits = NewerSnap.AnimIntentBits;
+								OutAnimDodgeDir = NewerSnap.AnimDodgeDir;
+								OutAnimPhysics = NewerSnap.AnimPhysics;
+								OutHintTime = NewerSnap.Time;
+							}
+							InterpMode = 1;
+							return true;
+						}
+				}
+				ExtrapolationTime = FClamp(RenderTime - OlderSnap.Time, 0.0, 0.050);
+				if (OlderSnap.bBasedOnMover && OlderSnap.BaseMover != None) {
+					MoverOffset = OlderSnap.BaseMover.Location - OlderSnap.MoverLoc;
+					if (VSize(MoverOffset) < 256.0)
+						OutPos = OlderSnap.BaseMover.Location + OlderSnap.RelLoc;
+					else
+						OutPos = OlderSnap.Loc + OlderSnap.Vel * ExtrapolationTime;
+				} else {
+					OutPos = OlderSnap.Loc + OlderSnap.Vel * ExtrapolationTime;
+				}
+					OutVel = OlderSnap.Vel;
+					OutRot = OlderSnap.Rot;
+					OutRot.Roll = 0;
+					OutAnimSeq = OlderSnap.AnimSeq;
+					OutAnimFrameByte = OlderSnap.AnimFrameByte;
+					OutAnimIntentBits = OlderSnap.AnimIntentBits;
+					OutAnimDodgeDir = OlderSnap.AnimDodgeDir;
+					OutAnimPhysics = OlderSnap.AnimPhysics;
+					OutHintTime = OlderSnap.Time;
+					InterpMode = 2;
+					return true;
+				}
+			NewerSnap = OlderSnap;
+		}
+
+		Idx = (Idx - 1 + BufSize) % BufSize;
+	}
+
+	if (NewerSnap != None) {
+		if (NewerSnap.bBasedOnMover && NewerSnap.BaseMover != None) {
+			MoverOffset = NewerSnap.BaseMover.Location - NewerSnap.MoverLoc;
+			if (VSize(MoverOffset) < 256.0)
+				OutPos = NewerSnap.BaseMover.Location + NewerSnap.RelLoc;
+			else
+				OutPos = NewerSnap.Loc;
+		} else {
+			OutPos = NewerSnap.Loc;
+		}
+			OutVel = NewerSnap.Vel;
+			OutRot = NewerSnap.Rot;
+			OutRot.Roll = 0;
+			OutAnimSeq = NewerSnap.AnimSeq;
+			OutAnimFrameByte = NewerSnap.AnimFrameByte;
+			OutAnimIntentBits = NewerSnap.AnimIntentBits;
+			OutAnimDodgeDir = NewerSnap.AnimDodgeDir;
+			OutAnimPhysics = NewerSnap.AnimPhysics;
+			OutHintTime = NewerSnap.Time;
+			InterpMode = 3;
+			return true;
+		}
+
+	return false;
+}
+
+simulated function bool IGPlus_SnapInterp_ApplyIntentHint(
+	byte SnapAnimIntentBits,
+	byte SnapAnimDodgeDir,
+	byte SnapAnimPhysics,
+	optional byte InterpMode,
+	optional float SnapshotAgeSec
+) {
+	local name TargetSeq;
+	local float TweenTime;
+	local float MaxIntentAgeSec;
+
+	// Intent hints are only used in stressed modes.
+	if (InterpMode <= 1)
+		return false;
+
+	// Ignore stale intent under heavy loss/clamp to avoid wrong transient pose hints.
+	MaxIntentAgeSec = 0.150;
+	if (SnapshotAgeSec > MaxIntentAgeSec)
+		return false;
+
+	// Bit 1: dodging
+	if ((SnapAnimIntentBits & 2) != 0) {
+		switch (GetDodgeDir(SnapAnimDodgeDir)) {
+			case DODGE_Left:
+				TargetSeq = 'DodgeL';
+				break;
+			case DODGE_Right:
+				TargetSeq = 'DodgeR';
+				break;
+			case DODGE_Back:
+				TargetSeq = 'DodgeB';
+				break;
+			case DODGE_Forward:
+			case DODGE_Active:
+				if ((SnapAnimIntentBits & 4) != 0)
+					TargetSeq = 'Flip';
+				else
+					TargetSeq = 'DodgeF';
+				break;
+			default:
+				TargetSeq = 'DodgeF';
+				break;
+		}
+
+		if (AnimSequence != TargetSeq)
+			TweenAnim(TargetSeq, 0.08);
+		return true;
+	}
+
+	// Bit 0: ducking/crouch.
+	if ((SnapAnimIntentBits & 1) != 0) {
+		if (GetAnimGroup(AnimSequence) != 'Ducking') {
+			TweenTime = 0.12;
+			if (GetPhysics(int(SnapAnimPhysics)) == PHYS_Falling)
+				TweenTime = 0.08;
+			TweenAnim('DuckWlkS', TweenTime);
+		}
+		return true;
+	}
+
+	return false;
+}
+
+simulated function bool IGPlus_SnapInterp_IsTransientAnim(name SnapAnimSeq, name SnapAnimGroup) {
+	if (SnapAnimGroup == 'Jumping' || SnapAnimGroup == 'Landing')
+		return true;
+
+	if (SnapAnimSeq == 'DodgeL' ||
+		SnapAnimSeq == 'DodgeR' ||
+		SnapAnimSeq == 'DodgeF' ||
+		SnapAnimSeq == 'DodgeB' ||
+		SnapAnimSeq == 'Flip')
+		return true;
+
+	return false;
+}
+
+simulated function float IGPlus_SnapInterp_GetAnimDurationSec(name SnapAnimSeq, name SnapAnimGroup) {
+	// Based on UT99 sequence data:
+	// - Jump/Land/Dodge are mostly 1-frame transients
+	// - Flip is 20 (male/boss) to 31 (female) frames.
+	if (SnapAnimSeq == 'Flip')
+		return 0.50;
+	if (SnapAnimSeq == 'DodgeL' ||
+		SnapAnimSeq == 'DodgeR' ||
+		SnapAnimSeq == 'DodgeF' ||
+		SnapAnimSeq == 'DodgeB')
+		return 0.10;
+	if (SnapAnimSeq == 'JumpLgFr' || SnapAnimSeq == 'JumpSmFr')
+		return 0.08;
+	if (SnapAnimSeq == 'LandLgFr' || SnapAnimSeq == 'LandSmFr')
+		return 0.06;
+
+	if (SnapAnimGroup == 'Landing')
+		return 0.08;
+	if (SnapAnimGroup == 'Jumping')
+		return 0.20;
+	if (SnapAnimGroup == 'Ducking')
+		return 1.00;
+
+	return 0.25;
+}
+
+simulated function bool IGPlus_SnapInterp_IsAnimHintFresh(
+	name SnapAnimSeq,
+	name SnapAnimGroup,
+	byte SnapAnimFrameByte,
+	float SnapshotAgeSec,
+	optional float FreshnessMarginSec
+) {
+	local float SequenceDuration;
+	local float FrameAlpha;
+	local float RemainingDuration;
+	local float FreshnessLimit;
+
+	SequenceDuration = IGPlus_SnapInterp_GetAnimDurationSec(SnapAnimSeq, SnapAnimGroup);
+	FrameAlpha = FClamp(float(SnapAnimFrameByte) / 255.0, 0.0, 1.0);
+	RemainingDuration = SequenceDuration * FClamp(1.0 - FrameAlpha, 0.0, 1.0);
+	FreshnessLimit = FMin(0.300, FMax(0.040, RemainingDuration + FreshnessMarginSec));
+
+	return SnapshotAgeSec <= FreshnessLimit;
+}
+
+simulated function bool IGPlus_SnapInterp_ApplyAnimHint(
+	name SnapAnimSeq,
+	byte SnapAnimFrameByte,
+	optional byte InterpMode,
+	optional float SnapshotAgeSec
+) {
+	local bool bTransient;
+	local float TweenTime;
+	local name SnapAnimGroup;
+	local float FreshnessMarginSec;
+
+	// InterpMode 0 means no usable interpolation output.
+	if (InterpMode <= 0)
+		return false;
+
+	if (SnapAnimSeq == '')
+		return false;
+
+	SnapAnimGroup = GetAnimGroup(SnapAnimSeq);
+	bTransient = IGPlus_SnapInterp_IsTransientAnim(SnapAnimSeq, SnapAnimGroup);
+
+	// In normal interpolation mode, only allow transient sequence hints.
+	if (InterpMode == 1 && bTransient == false)
+		return false;
+
+	// Expire hints based on sequence duration + frame position.
+	FreshnessMarginSec = 0.060;
+	if (InterpMode > 1)
+		FreshnessMarginSec = 0.090;
+	if (IGPlus_SnapInterp_IsAnimHintFresh(
+		SnapAnimSeq,
+		SnapAnimGroup,
+		SnapAnimFrameByte,
+		SnapshotAgeSec,
+		FreshnessMarginSec
+	) == false)
+		return false;
+
+	// Jumping sequences are highly transient; only use while proxy is actually airborne.
+	if (SnapAnimGroup == 'Jumping') {
+		if (Physics != PHYS_Falling && Velocity.Z <= 0.0)
+			return false;
+	}
+
+	if (AnimSequence != SnapAnimSeq) {
+		TweenTime = 0.06;
+		if (SnapAnimGroup == 'Jumping')
+			TweenTime = 0.08;
+		else if (SnapAnimGroup == 'Ducking')
+			TweenTime = 0.12;
+
+		TweenAnim(SnapAnimSeq, TweenTime);
+	}
+
+	AnimFrame = FClamp(float(SnapAnimFrameByte) / 255.0, 0.0, 1.0);
+	return true;
+}
+
+simulated function IGPlus_SnapInterp_Reset() {
+	local int i;
+
+	for (i = 0; i < arraycount(IGPlus_SnapInterp_Data); i++)
+		IGPlus_SnapInterp_Data[i] = None;
+
+	IGPlus_SnapInterp_DataIndex = 0;
+	IGPlus_SnapInterp_Count = 0;
+	IGPlus_SnapInterp_InterpDelay = 0.050;
+	IGPlus_SnapInterp_LastArrivalTime = 0;
+	IGPlus_SnapInterp_MeanInterval = 0;
+	IGPlus_SnapInterp_JitterEstimate = 0;
+	IGPlus_SnapInterp_LastCounter = 0;
+	IGPlus_SnapInterp_EnabledLast = IGPlus_EnableSnapshotInterpolation;
+}
+
+simulated function IGPlus_SnapInterp_After(float DeltaTime) {
+	local bool bReplicatedLocation;
+	local bool bCanRecoverPrev;
+	local bool bHasInterpolated;
+	local bool bAppliedIntentHint;
+	local bool bAppliedAnimHint;
+	local int RepCounter;
+	local int PrevCounter;
+	local byte InterpMode;
+	local float RenderTime;
+	local float ArrivalTime;
+	local float SnapshotTime;
+	local float PrevSnapshotTime;
+	local float ExpectedInterval;
+	local float OutHintTime;
+	local float HintAgeSec;
+	local name OutAnimSeq;
+	local byte OutAnimFrameByte;
+	local byte OutAnimIntentBits;
+	local byte OutAnimDodgeDir;
+	local byte OutAnimPhysics;
+	local vector OutPos;
+	local vector OutVel;
+	local rotator OutRot;
+	local vector FloorSnapLoc;
+	local vector FloorHitLoc;
+	local vector FloorHitNorm;
+	local Actor FloorActor;
+	local vector TraceExtent;
+
+	RepCounter = IGPlus_SnapReplicatedData.Counter;
+	PrevCounter = IGPlus_SnapReplicatedDataPrev.Counter;
+	bHasInterpolated = false;
+	bAppliedIntentHint = false;
+	bAppliedAnimHint = false;
+	InterpMode = 0;
+	OutHintTime = 0.0;
+	HintAgeSec = 0.0;
+	IGPlus_SnapInterp_LastInterpMode = 0;
+	IGPlus_SnapInterp_LastHintAgeMs = 0;
+	IGPlus_SnapInterp_LastHintSource = "none";
+	bReplicatedLocation = (RepCounter > IGPlus_SnapInterp_LastCounter)
+		|| (IGPlus_SnapInterp_LastCounter == 0 && RepCounter != 0);
+
+	if (bReplicatedLocation) {
+		ArrivalTime = Level.TimeSeconds;
+		// Use arrival time for interpolation to avoid server clock quantization issues.
+		SnapshotTime = ArrivalTime;
+		bCanRecoverPrev = true;
+
+		if (IGPlus_SnapReplicatedData.bHardSnap) {
+			IGPlus_SnapInterp_StatHardSnap += 1;
+			IGPlus_SnapInterp_Reset();
+			bCanRecoverPrev = false;
+		}
+
+		if (bCanRecoverPrev &&
+			IGPlus_SnapInterp_LastCounter > 0 &&
+			PrevCounter > IGPlus_SnapInterp_LastCounter &&
+			PrevCounter < RepCounter
+		) {
+			ExpectedInterval = IGPlus_SnapInterp_GetExpectedInterval();
+			PrevSnapshotTime = ArrivalTime - ExpectedInterval;
+				IGPlus_SnapInterp_Push(
+					IGPlus_SnapReplicatedDataPrev.Location,
+					IGPlus_SnapReplicatedDataPrev.Velocity,
+					IGPlus_SnapReplicatedDataPrev.Rotation,
+					IGPlus_SnapReplicatedDataPrev.AnimSequence,
+					IGPlus_SnapReplicatedDataPrev.AnimFrameByte,
+					IGPlus_SnapReplicatedDataPrev.AnimIntentBits,
+					IGPlus_SnapReplicatedDataPrev.AnimDodgeDir,
+					IGPlus_SnapReplicatedDataPrev.AnimPhysics,
+					PrevSnapshotTime,
+					ArrivalTime,
+				true,
+				IGPlus_SnapReplicatedDataPrev.bBasedOnMover,
+				IGPlus_SnapReplicatedDataPrev.MoverLocation,
+				IGPlus_SnapReplicatedDataPrev.BaseMover,
+				false);
+		}
+
+		IGPlus_SnapInterp_LastCounter = RepCounter;
+		IGPlus_SnapInterp_StatSnapPackets += 1;
+			IGPlus_SnapInterp_Push(
+				IGPlus_SnapReplicatedData.Location,
+				IGPlus_SnapReplicatedData.Velocity,
+				IGPlus_SnapReplicatedData.Rotation,
+				IGPlus_SnapReplicatedData.AnimSequence,
+				IGPlus_SnapReplicatedData.AnimFrameByte,
+				IGPlus_SnapReplicatedData.AnimIntentBits,
+				IGPlus_SnapReplicatedData.AnimDodgeDir,
+				IGPlus_SnapReplicatedData.AnimPhysics,
+				SnapshotTime,
+				ArrivalTime,
+			true,
+			IGPlus_SnapReplicatedData.bBasedOnMover,
+			IGPlus_SnapReplicatedData.MoverLocation,
+			IGPlus_SnapReplicatedData.BaseMover,
+			true);
+	}
+
+	if (IGPlus_SnapInterp_Count >= 2) {
+		RenderTime = Level.TimeSeconds - IGPlus_SnapInterp_InterpDelay;
+		bHasInterpolated = IGPlus_SnapInterp_Interpolate(
+			RenderTime,
+			OutPos,
+			OutVel,
+			OutRot,
+			OutAnimSeq,
+			OutAnimFrameByte,
+			OutAnimIntentBits,
+			OutAnimDodgeDir,
+			OutAnimPhysics,
+			OutHintTime,
+			InterpMode
+		);
+		if (bHasInterpolated) {
+			IGPlus_SnapInterp_LastInterpMode = InterpMode;
+			HintAgeSec = FMax(0.0, Level.TimeSeconds - OutHintTime);
+			IGPlus_SnapInterp_LastHintAgeMs = int(HintAgeSec * 1000.0 + 0.5);
+			if (InterpMode == 1)
+				IGPlus_SnapInterp_StatInterp += 1;
+			else if (InterpMode == 2) {
+				IGPlus_SnapInterp_StatExtrap += 1;
+				IGPlus_SnapInterp_BoostDelayForStress();
+			} else if (InterpMode == 3) {
+				IGPlus_SnapInterp_StatClamp += 1;
+				IGPlus_SnapInterp_BoostDelayForStress();
+			}
+		} else {
+			IGPlus_SnapInterp_StatFail += 1;
+			IGPlus_SnapInterp_BoostDelayForStress();
+		}
+	}
+
+	if (IGPlus_LocationOffsetFix_Moved == false)
+		return;
+
+	if (IGPlus_LocationOffsetFix_CollisionDummy != none) {
+		IGPlus_LocationOffsetFix_CollisionDummy.bCollideWorld = false;
+		IGPlus_LocationOffsetFix_CollisionDummy.SetCollision(false, false, false);
+	}
+
+	if (IGPlus_SnapInterp_Count < 2) {
+		if (bReplicatedLocation) {
+			bCollideWorld = false;
+			SetLocation(IGPlus_SnapReplicatedData.Location);
+			bCollideWorld = true;
+			OutRot = IGPlus_SnapReplicatedData.Rotation;
+			OutRot.Roll = 0;
+			SetRotation(OutRot);
+			DesiredRotation = OutRot;
+			InterpMode = 2;
+			HintAgeSec = 0.0;
+			IGPlus_SnapInterp_LastInterpMode = InterpMode;
+			IGPlus_SnapInterp_LastHintAgeMs = 0;
+			bAppliedIntentHint = IGPlus_SnapInterp_ApplyIntentHint(
+				IGPlus_SnapReplicatedData.AnimIntentBits,
+				IGPlus_SnapReplicatedData.AnimDodgeDir,
+				IGPlus_SnapReplicatedData.AnimPhysics,
+				InterpMode,
+				HintAgeSec
+			);
+			if (bAppliedIntentHint == false) {
+				bAppliedAnimHint = IGPlus_SnapInterp_ApplyAnimHint(
+					IGPlus_SnapReplicatedData.AnimSequence,
+					IGPlus_SnapReplicatedData.AnimFrameByte,
+					InterpMode,
+					HintAgeSec
+				);
+			}
+			if (bAppliedIntentHint)
+				IGPlus_SnapInterp_LastHintSource = "intent";
+			else if (bAppliedAnimHint)
+				IGPlus_SnapInterp_LastHintSource = "seq";
+		} else {
+			bCollideWorld = false;
+			SetLocation(IGPlus_LocationOffsetFix_OldLocation);
+			bCollideWorld = true;
+		}
+		IGPlus_LocationOffsetFix_Moved = false;
+		return;
+	}
+
+	if (bHasInterpolated) {
+		bCollideWorld = false;
+		SetLocation(OutPos);
+		bCollideWorld = true;
+		SetRotation(OutRot);
+		DesiredRotation = OutRot;
+		Velocity = OutVel;
+		bAppliedIntentHint = IGPlus_SnapInterp_ApplyIntentHint(
+			OutAnimIntentBits,
+			OutAnimDodgeDir,
+			OutAnimPhysics,
+			InterpMode,
+			HintAgeSec
+		);
+		if (bAppliedIntentHint == false) {
+			bAppliedAnimHint = IGPlus_SnapInterp_ApplyAnimHint(
+				OutAnimSeq,
+				OutAnimFrameByte,
+				InterpMode,
+				HintAgeSec
+			);
+		}
+		if (bAppliedIntentHint)
+			IGPlus_SnapInterp_LastHintSource = "intent";
+		else if (bAppliedAnimHint)
+			IGPlus_SnapInterp_LastHintSource = "seq";
+	} else {
+		bCollideWorld = false;
+		SetLocation(IGPlus_LocationOffsetFix_OldLocation);
+		bCollideWorld = true;
+	}
+
+	// Floor-snap: SetLocation with bCollideWorld=false bypasses UE1 floor tracing.
+	// Use an extent trace so slope/ramp contact uses cylinder geometry and
+	// returns a center position we can snap to directly.
+	// Do not floor-snap while moving upward, otherwise jump ascent can look like
+	// discrete vertical snapping for simulated proxies.
+	if (!bCanFly && !Region.Zone.bWaterZone && Velocity.Z <= 0.0) {
+		TraceExtent.X = CollisionRadius;
+		TraceExtent.Y = CollisionRadius;
+		TraceExtent.Z = CollisionHeight;
+		FloorActor = Trace(FloorHitLoc, FloorHitNorm,
+			Location - vect(0,0,1) * (CollisionHeight + MaxStepHeight + 2),
+			Location + vect(0,0,1) * (MaxStepHeight + 2),
+			false,
+			TraceExtent);
+		if (FloorActor != None && FloorHitNorm.Z >= 0.7 && Mover(FloorActor) == None) {
+			// Preserve interpolated X/Y motion. Only correct Z when the proxy
+			// is slightly below the floor to avoid movement snapping.
+			if (FloorHitLoc.Z > Location.Z + 0.01 && FloorHitLoc.Z - Location.Z <= MaxStepHeight + 2) {
+				FloorSnapLoc = Location;
+				FloorSnapLoc.Z = FloorHitLoc.Z;
+				bCollideWorld = false;
+				SetLocation(FloorSnapLoc);
+				bCollideWorld = true;
+			}
+		}
+	}
+
+	IGPlus_LocationOffsetFix_Moved = false;
+
+	if (IGPlus_LocationOffsetFix_FootstepQueued) {
+		FootStepping();
+		IGPlus_LocationOffsetFix_FootstepQueued = false;
+	}
+}
+
+simulated function bool IGPlus_LocationOffsetFix_IsOnMover() {
+	local Actor HitActor;
+	local vector HitLocation;
+	local vector HitNormal;
+	local vector Extent;
+
+	if (Mover(Base) != none)
+		return true;
+
+	if (bCanFly || Region.Zone.bWaterZone)
+		return false;
+
+	Extent.X = CollisionRadius;
+	Extent.Y = CollisionRadius;
+	Extent.Z = CollisionHeight;
+	HitActor = Trace(HitLocation, HitNormal, Location - vect(0,0,8), Location, false, Extent);
+
+	return (HitActor != none)
+		&& HitActor.IsA('Mover')
+		&& (HitNormal.Z >= 0.7);
+}
+
 simulated function IGPlus_LocationOffsetFix_Before() {
 	if (IGPlus_LocationOffsetFix_Moved)
 		return;
@@ -8400,8 +10043,14 @@ simulated function IGPlus_LocationOffsetFix_Before() {
 	IGPlus_LocationOffsetFix_OldLocation = Location;
 	IGPlus_LocationOffsetFix_Velocity = Velocity;
 	IGPlus_LocationOffsetFix_OnGround = IGPlus_LocationOffsetFix_IsOnGround(IGPlus_LocationOffsetFix_GroundNormal);
+	IGPlus_LocationOffsetFix_WasOnMover = IGPlus_LocationOffsetFix_IsOnMover();
 
-	SetLocation(vect(65535, 65535, 65535) + vect(512.0,512.0,512.0)*PlayerReplicationInfo.PlayerID);
+	SetLocation(
+		vect(65535, 65535, 65535) +  // edge of the playable area
+		// Separate players by some distance
+		// Guarantee its always outside the playable area (+1)
+		vect(512.0,512.0,512.0)*(PlayerReplicationInfo.PlayerID+1)
+	);
 	Velocity = IGPlus_LocationOffsetFix_DummyVel;
 	IGPlus_LocationOffsetFix_SafeLocation = Location;
 
@@ -8424,9 +10073,6 @@ function IGPlus_LocationOffsetFix_TickBefore() {
 	local PlayerReplicationInfo PRI;
 	local bbPlayer P;
 
-	if (Settings.bEnableLocationOffsetFix == false)
-		return;
-
 	if (Level.Pauser != "")
 		return;
 
@@ -8439,9 +10085,30 @@ function IGPlus_LocationOffsetFix_TickBefore() {
 			if (P.bDeleteMe) continue;
 			if (P.Role != ROLE_SimulatedProxy) continue;
 
-			P.IGPlus_LocationOffsetFix_Before();
+			if (IGPlus_ShouldUseSnapshotInterpForProxy(P))
+				P.IGPlus_LocationOffsetFix_Before();
+			else if (Settings.bEnableLocationOffsetFix)
+				P.IGPlus_LocationOffsetFix_Before();
+			else if (P.IGPlus_LocationOffsetFix_ShouldRunMoverOnly())
+				P.IGPlus_LocationOffsetFix_Before();
 		}
 	}
+}
+
+simulated function bool IGPlus_LocationOffsetFix_ShouldRunMoverOnly() {
+	local bool bOnMoverNow;
+
+	if (IGPlus_LocationOffsetFix_Moved)
+		return true;
+
+	bOnMoverNow = IGPlus_LocationOffsetFix_IsOnMover();
+	if (bOnMoverNow)
+		return true;
+
+	if (IGPlus_LocationOffsetFix_WasOnMover)
+		return true;
+
+	return VSize(IGPlus_LocationOffsetFix_PredictionOffset) > 0.01;
 }
 
 function IGPlus_FixNetspeed() {
@@ -10078,6 +11745,8 @@ function PlaySpawn() {
 
 	if (Mesh == none) return;
 
+	BaseEyeHeight = Default.BaseEyeHeight;
+
 	if ((Weapon == None) || (Weapon.Mass < 20)) {
 		NextSeq = 'Breath1';
 	} else {
@@ -10234,6 +11903,575 @@ exec function PrintWeaponState() {
 	if (Weapon != none) ClientMessage(Weapon.Name@Weapon.GetStateName());
 }
 
+exec function SnapInterpDebug() {
+	IGPlus_SnapInterp_NetDebug = !IGPlus_SnapInterp_NetDebug;
+	IGPlus_SnapInterp_NetDebugNextTime = 0;
+
+	if (IGPlus_SnapInterp_NetDebug)
+		ClientMessage("SnapInterp debug enabled (client report + server echo + proxy status)");
+	else
+		ClientMessage("SnapInterp debug disabled");
+}
+
+simulated function bbPlayer IGPlus_SnapInterp_FindTarget(optional string TargetFilter) {
+	local int i;
+	local PlayerReplicationInfo PRI;
+	local bbPlayer P;
+	local bbPlayer Target;
+	local string FilterCaps;
+
+	if (TargetFilter != "")
+		FilterCaps = Caps(TargetFilter);
+
+	P = bbPlayer(ViewTarget);
+	if (P != none &&
+		P.Role == ROLE_SimulatedProxy &&
+		(FilterCaps == "" || (P.PlayerReplicationInfo != none && InStr(Caps(P.PlayerReplicationInfo.PlayerName), FilterCaps) >= 0))
+		) {
+		Target = P;
+	}
+
+	if (Target == none && GameReplicationInfo != None && PlayerReplicationInfo != None) {
+		for (i = 0; i < arraycount(GameReplicationInfo.PRIArray); ++i) {
+			PRI = GameReplicationInfo.PRIArray[i];
+			if (PRI == none)
+				break;
+			P = bbPlayer(PRI.Owner);
+			if (P == none)
+				continue;
+			if (P == self)
+				continue;
+			if (P.Role != ROLE_SimulatedProxy)
+				continue;
+			if (FilterCaps != "" && (P.PlayerReplicationInfo == none || InStr(Caps(P.PlayerReplicationInfo.PlayerName), FilterCaps) < 0))
+				continue;
+			Target = P;
+			break;
+		}
+	}
+
+	return Target;
+}
+
+simulated function string IGPlus_SnapInterp_NormalizeCheckProfile(optional string Profile) {
+	if (Profile ~= "lossy" || Profile ~= "loss" || Profile ~= "jitter")
+		return "lossy";
+
+	return "clean";
+}
+
+simulated function IGPlus_SnapInterp_GetCheckThresholds(
+	string Profile,
+	out float MinInterpPct,
+	out float MaxExtrapPct,
+	out float MaxClampPct,
+	out float MaxFailPct,
+	out float MaxHardSnapPerMin
+) {
+	if (Profile ~= "lossy") {
+		MinInterpPct = 80.0;
+		MaxExtrapPct = 15.0;
+		MaxClampPct = 10.0;
+		MaxFailPct = 2.0;
+		MaxHardSnapPerMin = 3.0;
+	} else {
+		MinInterpPct = 95.0;
+		MaxExtrapPct = 4.0;
+		MaxClampPct = 3.0;
+		MaxFailPct = 0.5;
+		MaxHardSnapPerMin = 1.0;
+	}
+}
+
+simulated function IGPlus_SnapInterp_FinishCheck(bool bStopped) {
+	local bbPlayer Target;
+	local string TargetName;
+	local float DurationSec;
+	local int DeltaSnapPackets;
+	local int DeltaInterp;
+	local int DeltaExtrap;
+	local int DeltaClamp;
+	local int DeltaFail;
+	local int DeltaHardSnap;
+	local int TotalModes;
+	local float InterpPct;
+	local float ExtrapPct;
+	local float ClampPct;
+	local float FailPct;
+	local float HardSnapPerMin;
+	local float MinInterpPct;
+	local float MaxExtrapPct;
+	local float MaxClampPct;
+	local float MaxFailPct;
+	local float MaxHardSnapPerMin;
+	local bool bPass;
+	local string FailReasons;
+
+	if (IGPlus_SnapInterp_CheckActive == false)
+		return;
+
+	IGPlus_SnapInterp_CheckActive = false;
+	Target = IGPlus_SnapInterp_CheckTarget;
+
+	if (bStopped) {
+		ClientMessage("SnapInterpCheck stopped");
+		return;
+	}
+
+	if (Target == none || Target.bDeleteMe) {
+		ClientMessage("SnapInterpCheck aborted: target unavailable");
+		return;
+	}
+
+	TargetName = "Unknown";
+	if (Target.PlayerReplicationInfo != none)
+		TargetName = Target.PlayerReplicationInfo.PlayerName;
+
+	DurationSec = FMax(IGPlus_SnapInterp_CheckDuration, 0.001);
+	DeltaSnapPackets = Max(0, Target.IGPlus_SnapInterp_StatSnapPackets - IGPlus_SnapInterp_CheckBaseSnapPackets);
+	DeltaInterp = Max(0, Target.IGPlus_SnapInterp_StatInterp - IGPlus_SnapInterp_CheckBaseInterp);
+	DeltaExtrap = Max(0, Target.IGPlus_SnapInterp_StatExtrap - IGPlus_SnapInterp_CheckBaseExtrap);
+	DeltaClamp = Max(0, Target.IGPlus_SnapInterp_StatClamp - IGPlus_SnapInterp_CheckBaseClamp);
+	DeltaFail = Max(0, Target.IGPlus_SnapInterp_StatFail - IGPlus_SnapInterp_CheckBaseFail);
+	DeltaHardSnap = Max(0, Target.IGPlus_SnapInterp_StatHardSnap - IGPlus_SnapInterp_CheckBaseHardSnap);
+	TotalModes = DeltaInterp + DeltaExtrap + DeltaClamp + DeltaFail;
+
+	if (TotalModes > 0) {
+		InterpPct = 100.0 * float(DeltaInterp) / float(TotalModes);
+		ExtrapPct = 100.0 * float(DeltaExtrap) / float(TotalModes);
+		ClampPct = 100.0 * float(DeltaClamp) / float(TotalModes);
+		FailPct = 100.0 * float(DeltaFail) / float(TotalModes);
+	} else {
+		InterpPct = 0.0;
+		ExtrapPct = 0.0;
+		ClampPct = 0.0;
+		FailPct = 0.0;
+	}
+
+	HardSnapPerMin = 60.0 * float(DeltaHardSnap) / DurationSec;
+	IGPlus_SnapInterp_GetCheckThresholds(
+		IGPlus_SnapInterp_CheckProfile,
+		MinInterpPct,
+		MaxExtrapPct,
+		MaxClampPct,
+		MaxFailPct,
+		MaxHardSnapPerMin
+	);
+
+	bPass = true;
+	if (DeltaSnapPackets <= 0 || TotalModes <= 0) {
+		bPass = false;
+		FailReasons = "no_samples";
+	}
+	if (InterpPct < MinInterpPct) {
+		bPass = false;
+		if (FailReasons != "")
+			FailReasons = FailReasons$",";
+		FailReasons = FailReasons$"interp";
+	}
+	if (ExtrapPct > MaxExtrapPct) {
+		bPass = false;
+		if (FailReasons != "")
+			FailReasons = FailReasons$",";
+		FailReasons = FailReasons$"extrap";
+	}
+	if (ClampPct > MaxClampPct) {
+		bPass = false;
+		if (FailReasons != "")
+			FailReasons = FailReasons$",";
+		FailReasons = FailReasons$"clamp";
+	}
+	if (FailPct > MaxFailPct) {
+		bPass = false;
+		if (FailReasons != "")
+			FailReasons = FailReasons$",";
+		FailReasons = FailReasons$"fail";
+	}
+	if (HardSnapPerMin > MaxHardSnapPerMin) {
+		bPass = false;
+		if (FailReasons != "")
+			FailReasons = FailReasons$",";
+		FailReasons = FailReasons$"hardsnap";
+	}
+
+	ClientMessage(
+		"SnapInterpCheck result target="$TargetName$
+		" profile="$IGPlus_SnapInterp_CheckProfile$
+		" durS="$int(DurationSec + 0.5)$
+		" packets="$DeltaSnapPackets$
+		" interpPct="$int(InterpPct + 0.5)$
+		" extrapPct="$int(ExtrapPct + 0.5)$
+		" clampPct="$int(ClampPct + 0.5)$
+		" failPct="$int(FailPct + 0.5)$
+		" hardPerMin="$int(HardSnapPerMin + 0.5)$
+		" pass="$bPass
+	);
+	if (bPass == false)
+		ClientMessage("SnapInterpCheck thresholds failed: "$FailReasons);
+}
+
+exec simulated function SnapInterpCheck(optional string Profile, optional float DurationSeconds, optional string TargetFilter) {
+	local bbPlayer Target;
+	local string TargetName;
+
+	if (DurationSeconds <= 0.0)
+		DurationSeconds = 30.0;
+	DurationSeconds = FClamp(DurationSeconds, 5.0, 180.0);
+	Profile = IGPlus_SnapInterp_NormalizeCheckProfile(Profile);
+
+	Target = IGPlus_SnapInterp_FindTarget(TargetFilter);
+	if (Target == none) {
+		ClientMessage("SnapInterpCheck: no simulated proxy target found");
+		return;
+	}
+
+	if (Target.PlayerReplicationInfo != none)
+		TargetName = Target.PlayerReplicationInfo.PlayerName;
+	else
+		TargetName = "Unknown";
+
+	if (IGPlus_SnapInterp_CheckActive)
+		IGPlus_SnapInterp_FinishCheck(true);
+
+	IGPlus_SnapInterp_CheckActive = true;
+	IGPlus_SnapInterp_CheckDuration = DurationSeconds;
+	IGPlus_SnapInterp_CheckEndTime = Level.TimeSeconds + DurationSeconds;
+	IGPlus_SnapInterp_CheckProfile = Profile;
+	IGPlus_SnapInterp_CheckTarget = Target;
+	IGPlus_SnapInterp_CheckBaseSnapPackets = Target.IGPlus_SnapInterp_StatSnapPackets;
+	IGPlus_SnapInterp_CheckBaseInterp = Target.IGPlus_SnapInterp_StatInterp;
+	IGPlus_SnapInterp_CheckBaseExtrap = Target.IGPlus_SnapInterp_StatExtrap;
+	IGPlus_SnapInterp_CheckBaseClamp = Target.IGPlus_SnapInterp_StatClamp;
+	IGPlus_SnapInterp_CheckBaseFail = Target.IGPlus_SnapInterp_StatFail;
+	IGPlus_SnapInterp_CheckBaseHardSnap = Target.IGPlus_SnapInterp_StatHardSnap;
+
+	ClientMessage(
+		"SnapInterpCheck start target="$TargetName$
+		" profile="$Profile$
+		" durS="$int(DurationSeconds + 0.5)
+	);
+}
+
+exec simulated function SnapInterpCheckStop() {
+	if (IGPlus_SnapInterp_CheckActive == false) {
+		ClientMessage("SnapInterpCheck is not running");
+		return;
+	}
+
+	IGPlus_SnapInterp_FinishCheck(true);
+}
+
+exec simulated function SnapInterpStatus(optional string TargetFilter) {
+	local bbPlayer Target;
+	local string TargetName;
+	local string DebugMode;
+
+	Target = IGPlus_SnapInterp_FindTarget(TargetFilter);
+	if (Target == none) {
+		ClientMessage("SnapInterp status: no simulated proxy target found");
+		return;
+	}
+
+	TargetName = "Unknown";
+	if (Target.PlayerReplicationInfo != none)
+		TargetName = Target.PlayerReplicationInfo.PlayerName;
+
+	if (ViewTarget == Target)
+		DebugMode = "spectate";
+	else
+		DebugMode = "play";
+
+	ClientMessage(
+		"SnapInterp status target="$TargetName$
+		" mode="$DebugMode$
+		" snapEnabled="$Target.IGPlus_EnableSnapshotInterpolation$
+		" count="$Target.IGPlus_SnapInterp_Count$
+		" rep="$Target.IGPlus_SnapReplicatedData.Counter$
+		" last="$Target.IGPlus_SnapInterp_LastCounter$
+		" moved="$Target.IGPlus_LocationOffsetFix_Moved$
+		" delayMs="$int(Target.IGPlus_SnapInterp_InterpDelay * 1000.0)$
+		" interpMode="$Target.IGPlus_SnapInterp_LastInterpMode$
+		" hint="$Target.IGPlus_SnapInterp_LastHintSource$
+		" hintAgeMs="$Target.IGPlus_SnapInterp_LastHintAgeMs
+	);
+}
+
+exec function bEnableLoosePositionCheck(optional string Value) {
+	IGPlus_SetNetcodeSetting("bEnableLoosePositionCheck", Value);
+}
+
+exec function LooseCheckCorrectionFactor(optional string Value) {
+	IGPlus_SetNetcodeSetting("LooseCheckCorrectionFactor", Value);
+}
+
+exec function LooseCheckCorrectionFactorOnMover(optional string Value) {
+	IGPlus_SetNetcodeSetting("LooseCheckCorrectionFactorOnMover", Value);
+}
+
+exec function bEnableInputReplication(optional string Value) {
+	IGPlus_SetNetcodeSetting("bEnableInputReplication", Value);
+}
+
+exec function bEnableSnapshotInterpolation(optional string Value) {
+	IGPlus_SetNetcodeSetting("bEnableSnapshotInterpolation", Value);
+}
+
+exec function SnapshotInterpSendHz(optional string Value) {
+	IGPlus_SetNetcodeSetting("SnapshotInterpSendHz", Value);
+}
+
+exec function SnapshotInterpRewindMs(optional string Value) {
+	IGPlus_SetNetcodeSetting("SnapshotInterpRewindMs", Value);
+}
+
+exec function MaxJitterTime(optional string Value) {
+	IGPlus_SetNetcodeSetting("MaxJitterTime", Value);
+}
+
+exec function bEnableJitterBounding(optional string Value) {
+	IGPlus_SetNetcodeSetting("bEnableJitterBounding", Value);
+}
+
+exec function NetcodeHelp() {
+	if (Role < ROLE_Authority) {
+		IGPlus_ServerNetcodeHelp();
+		return;
+	}
+
+	IGPlus_PrintNetcodeHelp();
+}
+
+function IGPlus_ServerNetcodeHelp() {
+	IGPlus_PrintNetcodeHelp();
+}
+
+function IGPlus_PrintNetcodeHelp() {
+	local ServerSettings S;
+
+	S = None;
+	if (zzUTPure != None)
+		S = zzUTPure.Settings;
+
+	ClientMessage("Netcode settings (use '<Setting> <Value>'):");
+	if (S == None) {
+		ClientMessage("Settings unavailable");
+		return;
+	}
+
+	ClientMessage("bEnableLoosePositionCheck="$S.GetPropertyText("bEnableLoosePositionCheck"));
+	ClientMessage("LooseCheckCorrectionFactor="$S.GetPropertyText("LooseCheckCorrectionFactor"));
+	ClientMessage("LooseCheckCorrectionFactorOnMover="$S.GetPropertyText("LooseCheckCorrectionFactorOnMover"));
+	ClientMessage("bEnableInputReplication="$S.GetPropertyText("bEnableInputReplication"));
+	ClientMessage("bEnableSnapshotInterpolation="$S.GetPropertyText("bEnableSnapshotInterpolation"));
+	ClientMessage("SnapshotInterpSendHz="$S.GetPropertyText("SnapshotInterpSendHz"));
+	ClientMessage("SnapshotInterpRewindMs="$S.GetPropertyText("SnapshotInterpRewindMs"));
+	ClientMessage("MaxJitterTime="$S.GetPropertyText("MaxJitterTime"));
+	ClientMessage("bEnableJitterBounding="$S.GetPropertyText("bEnableJitterBounding"));
+	ClientMessage("SnapInterpDebug (toggle client report + server echo + proxy status)");
+	ClientMessage("SnapInterpStatus [NameFilter] (one-shot proxy runtime status)");
+	ClientMessage("SnapInterpNetStatus [NameFilter] (client report + server echo + proxy status)");
+	ClientMessage("SnapInterpCheck [clean|lossy] [DurationSec] [NameFilter]");
+	ClientMessage("SnapInterpCheckStop");
+}
+
+exec function IGPlus_SetNetcodeSetting(string Key, optional string Value) {
+	if (Role < ROLE_Authority) {
+		IGPlus_ServerSetNetcodeSetting(Key, Value);
+		return;
+	}
+
+	if (bAdmin == false) {
+		ClientMessage("Admin only");
+		return;
+	}
+
+	IGPlus_ApplyNetcodeSetting(Key, Value);
+}
+
+function IGPlus_ServerSetNetcodeSetting(string Key, string Value) {
+	if (bAdmin == false) {
+		ClientMessage("Admin only");
+		return;
+	}
+
+	IGPlus_ApplyNetcodeSetting(Key, Value);
+}
+
+function string IGPlus_NormalizeNetcodeKey(string Key) {
+	if (Key ~= "bEnableLoosePositionCheck") return "bEnableLoosePositionCheck";
+	if (Key ~= "LooseCheckCorrectionFactor") return "LooseCheckCorrectionFactor";
+	if (Key ~= "LooseCheckCorrectionFactorOnMover") return "LooseCheckCorrectionFactorOnMover";
+	if (Key ~= "bEnableInputReplication") return "bEnableInputReplication";
+	if (Key ~= "bEnableSnapshotInterpolation") return "bEnableSnapshotInterpolation";
+	if (Key ~= "SnapshotInterpSendHz") return "SnapshotInterpSendHz";
+	if (Key ~= "SnapshotInterpRewindMs") return "SnapshotInterpRewindMs";
+	if (Key ~= "MaxJitterTime") return "MaxJitterTime";
+	if (Key ~= "bEnableJitterBounding") return "bEnableJitterBounding";
+	return "";
+}
+
+function IGPlus_ApplyNetcodeSettingsToPlayers() {
+	local Pawn P;
+	local bbPlayer BP;
+	local bool bOldSnap;
+
+	for (P = Level.PawnList; P != None; P = P.NextPawn) {
+		BP = bbPlayer(P);
+		if (BP == None)
+			continue;
+
+		BP.IGPlus_EnableInputReplication = zzUTPure.Settings.bEnableInputReplication;
+		bOldSnap = BP.IGPlus_EnableSnapshotInterpolation;
+		BP.IGPlus_EnableSnapshotInterpolation = zzUTPure.Settings.bEnableSnapshotInterpolation;
+
+		if (bOldSnap != BP.IGPlus_EnableSnapshotInterpolation) {
+			BP.IGPlus_SnapInterp_ServerNextTime = 0;
+			BP.IGPlus_SnapInterp_ServerHasLast = false;
+			BP.IGPlus_SnapInterp_CheckActive = false;
+			BP.IGPlus_ServerSnapInterpDelayMsSmoothed = 0.0;
+			BP.IGPlus_ServerSnapInterpDelayValid = false;
+			BP.IGPlus_ServerSnapInterpTrusted = false;
+			BP.IGPlus_ServerSnapInterpLastAcceptedTime = 0.0;
+			BP.IGPlus_NextSnapInterpDelayReportTime = 0.0;
+			BP.IGPlus_NextSnapInterpDelayClientReportTime = 0.0;
+			BP.IGPlus_ClientSnapInterpDelayMs = -1;
+			BP.IGPlus_ClientSnapInterpDelaySampleCount = 0;
+			BP.IGPlus_ClientSnapInterpDelayMedianMs = -1;
+			BP.IGPlus_ClientSnapInterpDelaySpreadMs = -1;
+			BP.IGPlus_ServerSnapInterpDelayReportedMsEcho = -1;
+			BP.IGPlus_ServerSnapInterpDelayClampedMsEcho = -1;
+			BP.IGPlus_ServerSnapInterpDelaySmoothedMsEcho = 0;
+			BP.IGPlus_ServerSnapInterpDelayValidEcho = false;
+			BP.IGPlus_ServerSnapInterpTrustedEcho = false;
+			BP.IGPlus_ServerSnapInterpDelayEchoTime = 0.0;
+			BP.IGPlus_ServerSnapInterpLastAcceptedTimeEcho = 0.0;
+		}
+	}
+}
+
+function IGPlus_ApplyNetcodeSetting(string Key, string Value) {
+	local string NormalKey;
+
+	if (zzUTPure == None || zzUTPure.Settings == None) {
+		ClientMessage("No server settings loaded");
+		return;
+	}
+
+	NormalKey = IGPlus_NormalizeNetcodeKey(Key);
+	if (NormalKey == "") {
+		ClientMessage("Unknown netcode setting: " $ Key);
+		return;
+	}
+
+	if (Value == "") {
+		ClientMessage(NormalKey $ "=" $ zzUTPure.Settings.GetPropertyText(NormalKey));
+		return;
+	}
+
+	zzUTPure.Settings.SetPropertyText(NormalKey, Value);
+	zzUTPure.Settings.SaveConfig();
+	IGPlus_ApplyNetcodeSettingsToPlayers();
+	ClientMessage(NormalKey $ "=" $ zzUTPure.Settings.GetPropertyText(NormalKey));
+}
+
+simulated function ServerSettings IGPlus_GetServerSettingsObject() {
+	if (IGPlus_ServerSettingsMenuData != none)
+		return IGPlus_ServerSettingsMenuData;
+
+	IGPlus_ServerSettingsHelper = new(none, 'InstaGibPlus') class'Object';
+	IGPlus_ServerSettingsMenuData = new(IGPlus_ServerSettingsHelper, 'IGPlus_ServerSettingsMenu') class'ServerSettings';
+	return IGPlus_ServerSettingsMenuData;
+}
+
+function IGPlus_ServerSettingsInit() {
+	IGPlus_ServerSettingsMenuLoaded = false;
+	IGPlus_ServerSettingsMenuCanEdit = false;
+	IGPlus_ServerSettingsMenuData = none;
+}
+
+function IGPlus_ServerSettingsSet(string Key, string Value) {
+	local ServerSettings S;
+
+	S = IGPlus_GetServerSettingsObject();
+	if (S == none)
+		return;
+
+	S.SetPropertyText(Key, Value);
+}
+
+function IGPlus_ServerSettingsDone(bool bCanEdit) {
+	IGPlus_ServerSettingsMenuLoaded = true;
+	IGPlus_ServerSettingsMenuCanEdit = bCanEdit;
+}
+
+function IGPlus_ServerSendSetting(string Key) {
+	if (zzUTPure == none || zzUTPure.Settings == none)
+		return;
+
+	IGPlus_ServerSettingsSet(Key, zzUTPure.Settings.GetPropertyText(Key));
+}
+
+function IGPlus_ServerRequestSettings() {
+	if (bAdmin == false || zzUTPure == none || zzUTPure.Settings == none) {
+		IGPlus_ServerSettingsInit();
+		IGPlus_ServerSettingsDone(false);
+		return;
+	}
+
+	IGPlus_ServerSettingsInit();
+
+	IGPlus_ServerSendSetting("bAutoPause");
+	IGPlus_ServerSendSetting("PauseTotalTime");
+	IGPlus_ServerSendSetting("PauseTime");
+	IGPlus_ServerSendSetting("bForceDemo");
+	IGPlus_ServerSendSetting("bRestrictTrading");
+	IGPlus_ServerSendSetting("MaxTradeTimeMargin");
+	IGPlus_ServerSendSetting("TradePingMargin");
+	IGPlus_ServerSendSetting("KillCamDelay");
+	IGPlus_ServerSendSetting("KillCamDuration");
+
+	IGPlus_ServerSendSetting("bJumpingPreservesMomentum");
+	IGPlus_ServerSendSetting("bOldLandingMomentum");
+	IGPlus_ServerSendSetting("bEnableSingleButtonDodge");
+	IGPlus_ServerSendSetting("bUseFlipAnimation");
+	IGPlus_ServerSendSetting("bEnableWallDodging");
+	IGPlus_ServerSendSetting("bDodgePreserveZMomentum");
+	IGPlus_ServerSendSetting("MaxMultiDodges");
+	IGPlus_ServerSendSetting("BrightskinMode");
+	IGPlus_ServerSendSetting("PlayerScale");
+	IGPlus_ServerSendSetting("bAlwaysRenderFlagCarrier");
+	IGPlus_ServerSendSetting("bAlwaysRenderDroppedFlags");
+
+	IGPlus_ServerSendSetting("MaxPosError");
+	IGPlus_ServerSendSetting("MaxHitError");
+	IGPlus_ServerSendSetting("MaxJitterTime");
+	IGPlus_ServerSendSetting("WarpFixDelay");
+	IGPlus_ServerSendSetting("FireTimeout");
+	IGPlus_ServerSendSetting("MinNetUpdateRate");
+	IGPlus_ServerSendSetting("MaxNetUpdateRate");
+	IGPlus_ServerSendSetting("bEnableInputReplication");
+	IGPlus_ServerSendSetting("bEnableServerExtrapolation");
+	IGPlus_ServerSendSetting("bEnableServerPacketReordering");
+	IGPlus_ServerSendSetting("bEnableLoosePositionCheck");
+	IGPlus_ServerSendSetting("bPlayersAlwaysRelevant");
+	IGPlus_ServerSendSetting("bEnablePingCompensatedSpawn");
+	IGPlus_ServerSendSetting("bEnableJitterBounding");
+	IGPlus_ServerSendSetting("LooseCheckCorrectionFactor");
+	IGPlus_ServerSendSetting("LooseCheckCorrectionFactorOnMover");
+	IGPlus_ServerSendSetting("bEnableSnapshotInterpolation");
+	IGPlus_ServerSendSetting("SnapshotInterpSendHz");
+	IGPlus_ServerSendSetting("SnapshotInterpRewindMs");
+	IGPlus_ServerSendSetting("bEnableWarpFix");
+
+	IGPlus_ServerSendSetting("ShowTouchedPackage");
+	IGPlus_ServerSendSetting("HitFeedbackMode");
+	IGPlus_ServerSendSetting("bEnableDamageDebugMode");
+	IGPlus_ServerSendSetting("bEnableDamageDebugConsoleMessages");
+	IGPlus_ServerSendSetting("bEnableHitboxDebugMode");
+
+	IGPlus_ServerSettingsDone(true);
+}
+
 exec function DrawServerLocation() {
 	IGPlus_LocationOffsetFix_DrawServerLocation = !IGPlus_LocationOffsetFix_DrawServerLocation;
 }
@@ -10295,4 +12533,8 @@ defaultproperties
 
 	IGPlus_LocationOffsetFix_PredCompatMode=True
 	IGPlus_EnableInputReplication=True
+	IGPlus_ClientSnapInterpDelayMs=-1
+	IGPlus_ClientSnapInterpDelayMedianMs=-1
+	IGPlus_ServerSnapInterpDelayReportedMsEcho=-1
+	IGPlus_ServerSnapInterpDelayClampedMsEcho=-1
 }

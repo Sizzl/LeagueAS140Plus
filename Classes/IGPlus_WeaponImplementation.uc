@@ -43,7 +43,21 @@ function EnhancedHurtRadius(
 	name   DamageName,
 	float  Momentum,
 	vector HitLocation,
-	optional bool bIsRazor2Alt
+	optional bool bIsRazor2Alt,
+	optional float SelfDamageAmount,
+	optional float SelfMomentum
+);
+
+function SplashDamageWithSelfDamage(
+	Actor Source,
+	float DamageAmount,
+	float SelfDamageAmount,
+	float DamageRadius,
+	name DamageName,
+	float Momentum,
+	float SelfMomentum,
+	vector HitLocation,
+	optional bool bUseEnhancedSplash
 );
 
 simulated function bool CheckHeadShot(Pawn P, vector HitLocation, vector Direction);
@@ -55,6 +69,24 @@ simulated function bool CheckHeadShotCompensated(UTPlusDummy D, vector HitLocati
 simulated function bool CheckBodyShotCompensated(UTPlusDummy D, vector HitLocation, vector Direction);
 
 function float GetAverageTickRate();
+
+function float IGPlus_GetOneWayLatencyMs(Pawn Instigator);
+
+function float IGPlus_GetHitscanRewindMs(Pawn Instigator);
+
+function vector IGPlus_AdjustLocationToCurrentMoverFrame(
+	Pawn Instigator,
+	vector FireLoc,
+	float SampleLatencyMs,
+	optional Mover BaseMover
+);
+
+function vector IGPlus_AdjustLocationToHistoricalMoverFrame(
+	Pawn Instigator,
+	vector FireLoc,
+	float SampleLatencyMs,
+	optional Mover BaseMover
+);
 
 function SimulateProjectileWithHistory(ST_TranslocatorTarget TTarget, int Ping);
 

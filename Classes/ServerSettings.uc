@@ -76,6 +76,11 @@ var config bool  bEnableLoosePositionCheck;
 var config bool  bPlayersAlwaysRelevant;
 var config bool  bEnablePingCompensatedSpawn;
 var config bool  bEnableJitterBounding;
+var config float LooseCheckCorrectionFactor;
+var config float LooseCheckCorrectionFactorOnMover;
+var config bool  bEnableSnapshotInterpolation;
+var config float SnapshotInterpSendHz;
+var config float SnapshotInterpRewindMs;
 var config bool  bEnableWarpFix;
 var config bool  bEnableCarcassCollision;
 var config bool  ShowTouchedPackage;
@@ -141,6 +146,11 @@ function DumpServerSettings(PlayerPawn P) {
 	DumpSetting(P, "bPlayersAlwaysRelevant");
 	DumpSetting(P, "bEnablePingCompensatedSpawn");
 	DumpSetting(P, "bEnableJitterBounding");
+	DumpSetting(P, "LooseCheckCorrectionFactor");
+	DumpSetting(P, "LooseCheckCorrectionFactorOnMover");
+	DumpSetting(P, "bEnableSnapshotInterpolation");
+	DumpSetting(P, "SnapshotInterpSendHz");
+	DumpSetting(P, "SnapshotInterpRewindMs");
 	DumpSetting(P, "bEnableWarpFix");
 	DumpSetting(P, "ShowTouchedPackage");
 	DumpSetting(P, "HitFeedbackMode");
@@ -210,6 +220,11 @@ defaultproperties
 	bPlayersAlwaysRelevant=True
 	bEnablePingCompensatedSpawn=True
 	bEnableJitterBounding=False
+	LooseCheckCorrectionFactor=1.0
+	LooseCheckCorrectionFactorOnMover=1.0
+	bEnableSnapshotInterpolation=False
+	SnapshotInterpSendHz=30.0
+	SnapshotInterpRewindMs=66.0
 	bEnableWarpFix=True
 	bEnableCarcassCollision=True
 	HitFeedbackMode=HFM_Always

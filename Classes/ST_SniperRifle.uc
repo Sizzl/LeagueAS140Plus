@@ -92,6 +92,9 @@ simulated function bool ClientFire(float Value)
 {
 	local bbPlayer bbP;
 	
+	if (!bCanClientFire)
+		return false;
+
 	if (Owner.IsA('Bot'))
 		return Super.ClientFire(Value);
 		
@@ -116,7 +119,6 @@ simulated function bool ClientFire(float Value)
 				Instigator = Pawn(Owner);
 				GotoState('ClientFiring');
 				bPointing = True;
-				bCanClientFire = true;
 				if (bRapidFire || (FiringSpeed > 0))
 					Pawn(Owner).PlayRecoil(FiringSpeed);
 				
@@ -152,12 +154,18 @@ function TraceFire(float Accuracy) {
 	local vector HitLocation, HitNormal, StartTrace, EndTrace, X,Y,Z;
 	local actor Other;
 	local Pawn PawnOwner;
+	local float RewindMs;
 
 	PawnOwner = Pawn(Owner);
 
 	Owner.MakeNoise(PawnOwner.SoundDampening);
 	GetAxes(PawnOwner.ViewRotation,X,Y,Z);
-	StartTrace = Owner.Location + PawnOwner.Eyeheight * vect(0,0,1); 
+	StartTrace = Owner.Location + PawnOwner.Eyeheight * vect(0,0,1);
+	if (WImp != None && WImp.WeaponSettings.bEnablePingCompensation)
+	{
+		RewindMs = WImp.IGPlus_GetHitscanRewindMs(PawnOwner);
+		StartTrace = WImp.IGPlus_AdjustLocationToHistoricalMoverFrame(PawnOwner, StartTrace, RewindMs);
+	}
 	AdjustedAim = PawnOwner.AdjustAim(1000000, StartTrace, 2*AimError, False, False);	
 	X = vector(AdjustedAim);
 	EndTrace = StartTrace + 100000 * X;
@@ -400,6 +408,8 @@ simulated function Tick(float DeltaTime) {
 // Add state for client-side firing
 state ClientFiring
 {
+	simulated function bool ClientFire(float Value) { return false; }
+	simulated function bool ClientAltFire(float Value) { return false; }
 
 	simulated function AnimEnd() {
 		if ((Pawn(Owner) == None) || ((AmmoType != None) && (AmmoType.AmmoAmount <= 0))) {
@@ -443,6 +453,8 @@ state ClientActive
 	// Handle animation end in client active state
 	simulated function AnimEnd()
 	{
+		bCanClientFire = true;
+
 		if (Owner == None) {
 			Global.AnimEnd();
 			GotoState('');

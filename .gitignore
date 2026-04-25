@@ -7,3 +7,11 @@ PostBuildHook.bat
 /System/**/*.u
 /System/**/*.uz
 
+/Extras/
+
+build_all.sh
+build.sh
+
+.env
+.cursorignore
+.DS_Store
